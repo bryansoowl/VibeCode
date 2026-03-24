@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InboxMY — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --cream:#faf8f3; --cream2:#f3f0e8; --cream3:#ebe7db;
+  --ink:#1a1612; --ink2:#3d3530; --ink3:#7a7068; --ink4:#a89e94;
+  --coral:#e8402a; --coral2:#ff5c3e; --coral-bg:#fdf0ed;
+  --teal:#0d7a6e; --teal-bg:#e8f5f3;
+  --amber:#c97a1a; --amber-bg:#fdf5e8;
+  --purple:#5c48c9; --purple-bg:#f0edff;
+  --blue:#2a6abf; --blue-bg:#e8f0fd;
+  --green:#1a8a3c; --green-bg:#eaf5ee;
+  --border:rgba(26,22,18,.09); --border2:rgba(26,22,18,.05);
+  --serif:'Fraunces',Georgia,serif; --sans:'Plus Jakarta Sans',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:13px;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+
+/* TOPBAR */
+#topbar{height:48px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--border);background:#fff;flex-shrink:0;gap:12px}
+.tb-logo{font-family:var(--serif);font-size:17px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:7px;flex-shrink:0}
+.tb-dot{width:8px;height:8px;border-radius:50%;background:var(--coral)}
+.tb-search{flex:1;max-width:480px;position:relative}
+.tb-search input{width:100%;padding:7px 12px 7px 34px;border-radius:8px;border:1px solid var(--border);background:var(--cream);font-family:var(--sans);font-size:13px;color:var(--ink);outline:none;transition:border-color .15s}
+.tb-search input:focus{border-color:var(--coral);background:#fff}
+.tb-search input::placeholder{color:var(--ink4)}
+.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--ink4);font-size:14px}
+.tb-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.tb-lang{padding:5px 10px;border-radius:6px;border:1px solid var(--border);background:transparent;font-family:var(--sans);font-size:12px;font-weight:600;color:var(--ink3);cursor:pointer;transition:background .1s}
+.tb-lang:hover{background:var(--cream2)}
+.tb-lang.active{background:var(--coral-bg);color:var(--coral);border-color:rgba(232,64,42,.2)}
+.tb-avatar{width:30px;height:30px;border-radius:50%;background:var(--coral);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
+
+/* SHELL */
+#shell{display:flex;flex:1;overflow:hidden}
+
+/* SIDEBAR */
+#sidebar{width:220px;border-right:1px solid var(--border);background:#fff;display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto}
+#sidebar::-webkit-scrollbar{width:0}
+.sb-compose{margin:12px;padding:9px 14px;border-radius:9px;background:var(--coral);color:#fff;font-size:13px;font-weight:600;text-align:center;cursor:pointer;border:none;font-family:var(--sans);transition:background .15s}
+.sb-compose:hover{background:var(--coral2)}
+.sb-section{padding:6px 8px 4px}
+.sb-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--ink4);padding:4px 10px 6px}
+.sb-item{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:7px;cursor:pointer;transition:background .1s;font-size:13px;color:var(--ink2);font-weight:500}
+.sb-item:hover{background:var(--cream2)}
+.sb-item.active{background:var(--coral-bg);color:var(--coral)}
+.sb-icon{width:18px;text-align:center;font-size:14px;flex-shrink:0}
+.sb-badge{margin-left:auto;background:var(--coral);color:#fff;border-radius:999px;font-size:10px;font-weight:700;padding:1px 7px;min-width:20px;text-align:center}
+.sb-badge.grey{background:var(--cream3);color:var(--ink3)}
+.sb-sep{height:1px;background:var(--border2);margin:6px 12px}
+
+/* ACCOUNTS in sidebar */
+.sb-account{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:7px;cursor:pointer;transition:background .1s}
+.sb-account:hover{background:var(--cream2)}
+.sb-account.active{background:var(--cream2)}
+.acct-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.acct-name{font-size:12px;font-weight:500;color:var(--ink2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.acct-count{font-size:11px;color:var(--ink4);font-weight:600}
+
+/* EMAIL LIST */
+#email-list{width:340px;border-right:1px solid var(--border);background:var(--cream);display:flex;flex-direction:column;flex-shrink:0}
+.el-header{padding:12px 14px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--cream);flex-shrink:0}
+.el-title{font-family:var(--serif);font-size:18px;font-weight:600;color:var(--ink)}
+.el-count{font-size:12px;color:var(--ink4);font-weight:500}
+.el-filters{display:flex;gap:4px;padding:8px 10px;border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto}
+.el-filters::-webkit-scrollbar{height:0}
+.el-filter{padding:4px 11px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid transparent;white-space:nowrap;transition:all .15s;color:var(--ink3);background:transparent}
+.el-filter.active{background:#fff;color:var(--ink);border-color:var(--border);box-shadow:0 1px 3px rgba(26,22,18,.06)}
+.el-filter:hover:not(.active){background:var(--cream3)}
+.el-items{flex:1;overflow-y:auto}
+.el-items::-webkit-scrollbar{width:3px}
+.el-items::-webkit-scrollbar-thumb{background:var(--cream3)}
+.email-row{display:grid;grid-template-columns:36px 1fr auto;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border2);cursor:pointer;transition:background .1s;align-items:start}
+.email-row:hover{background:var(--cream2)}
+.email-row.selected{background:#fff;border-left:3px solid var(--coral)}
+.email-row.unread .er-from{font-weight:700}
+.email-row.unread .er-subject{font-weight:600;color:var(--ink)}
+.er-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0}
+.er-body{min-width:0}
+.er-from{font-size:13px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.er-subject{font-size:12px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.er-preview{font-size:11px;color:var(--ink4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.er-meta{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
+.er-time{font-size:11px;color:var(--ink4)}
+.er-tag{padding:2px 7px;border-radius:999px;font-size:10px;font-weight:700;white-space:nowrap}
+.tag-bill{background:var(--amber-bg);color:var(--amber)}
+.tag-govt{background:var(--teal-bg);color:var(--teal)}
+.tag-shop{background:var(--purple-bg);color:var(--purple)}
+.tag-work{background:var(--coral-bg);color:var(--coral)}
+.tag-bank{background:var(--blue-bg);color:var(--blue)}
+.tag-promo{background:var(--cream3);color:var(--ink3)}
+.er-unread-dot{width:7px;height:7px;border-radius:50%;background:var(--coral)}
+
+/* EMAIL DETAIL */
+#email-detail{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#fff}
+.ed-header{padding:20px 28px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
+.ed-subject{font-family:var(--serif);font-size:22px;font-weight:400;color:var(--ink);margin-bottom:12px;line-height:1.3}
+.ed-meta-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ed-from-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0}
+.ed-from-info{flex:1}
+.ed-from-name{font-size:13px;font-weight:600;color:var(--ink)}
+.ed-from-email{font-size:12px;color:var(--ink4)}
+.ed-timestamp{font-size:12px;color:var(--ink4)}
+.ed-tags{display:flex;gap:6px;align-items:center}
+.ed-tag{padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700}
+.ed-actions{display:flex;gap:6px;margin-left:auto;flex-shrink:0}
+.ed-btn{padding:6px 14px;border-radius:7px;border:1px solid var(--border);background:transparent;font-family:var(--sans);font-size:12px;font-weight:600;color:var(--ink2);cursor:pointer;transition:all .15s}
+.ed-btn:hover{background:var(--cream2);border-color:var(--ink4)}
+.ed-btn.primary{background:var(--coral);color:#fff;border-color:var(--coral)}
+.ed-btn.primary:hover{background:var(--coral2)}
+
+/* Smart card */
+.smart-card{margin:16px 28px;border-radius:12px;border:1px solid var(--border);overflow:hidden;flex-shrink:0}
+.sc-header{display:flex;align-items:center;gap:10px;padding:12px 16px;background:var(--cream2);border-bottom:1px solid var(--border)}
+.sc-icon{font-size:18px}
+.sc-label{font-size:12px;font-weight:700;color:var(--ink2)}
+.sc-sublabel{font-size:11px;color:var(--ink4)}
+.sc-body{display:flex;gap:0;background:#fff}
+.sc-stat{flex:1;padding:12px 16px;border-right:1px solid var(--border2);text-align:center}
+.sc-stat:last-child{border-right:none}
+.sc-val{font-family:var(--serif);font-size:20px;font-weight:600;color:var(--ink);display:block;margin-bottom:2px}
+.sc-key{font-size:11px;color:var(--ink4)}
+.sc-val.coral{color:var(--coral)}
+.sc-val.teal{color:var(--teal)}
+.sc-val.amber{color:var(--amber)}
+
+.ed-body{flex:1;overflow-y:auto;padding:24px 28px}
+.ed-body::-webkit-scrollbar{width:4px}
+.ed-body::-webkit-scrollbar-thumb{background:var(--cream3)}
+.email-content{font-size:14px;color:var(--ink2);line-height:1.75;max-width:640px}
+.email-content p{margin-bottom:14px}
+.email-content .highlight{background:var(--amber-bg);padding:2px 6px;border-radius:4px;font-weight:600;color:var(--amber)}
+.email-content .bill-box{background:var(--cream2);border:1px solid var(--border);border-radius:10px;padding:16px;margin:20px 0;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.bb-item{}
+.bb-key{font-size:11px;color:var(--ink4);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+.bb-val{font-size:15px;font-weight:600;color:var(--ink)}
+.bb-val.big{font-family:var(--serif);font-size:22px;color:var(--coral)}
+
+/* RIGHT PANEL */
+#right-panel{width:240px;border-left:1px solid var(--border);background:var(--cream);overflow-y:auto;flex-shrink:0;display:flex;flex-direction:column;gap:0}
+#right-panel::-webkit-scrollbar{width:0}
+.rp-section{padding:14px;border-bottom:1px solid var(--border)}
+.rp-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--ink4);margin-bottom:10px}
+.bill-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;background:#fff;border:1px solid var(--border);margin-bottom:6px;transition:background .1s;cursor:pointer}
+.bill-item:hover{background:var(--cream2)}
+.bi-icon{font-size:16px}
+.bi-info{flex:1;min-width:0}
+.bi-name{font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bi-due{font-size:11px;color:var(--ink4)}
+.bi-amt{font-size:13px;font-weight:700;font-family:var(--serif);color:var(--ink)}
+.bi-amt.urgent{color:var(--coral)}
+.order-item{padding:8px 10px;border-radius:8px;background:#fff;border:1px solid var(--border);margin-bottom:6px;cursor:pointer;transition:background .1s}
+.order-item:hover{background:var(--cream2)}
+.oi-shop{font-size:11px;font-weight:700;color:var(--purple);margin-bottom:2px}
+.oi-name{font-size:12px;color:var(--ink2);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.oi-status{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink4)}
+.oi-dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+
+/* COMPOSE OVERLAY */
+#compose{display:none;position:fixed;bottom:20px;right:260px;width:480px;background:#fff;border-radius:14px;border:1px solid var(--border);box-shadow:0 12px 48px rgba(26,22,18,.12);z-index:200;flex-direction:column;overflow:hidden}
+#compose.show{display:flex}
+.cmp-header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--ink);border-radius:14px 14px 0 0}
+.cmp-title{font-size:13px;font-weight:600;color:#fff}
+.cmp-close{background:transparent;border:none;color:rgba(255,255,255,.6);font-size:18px;cursor:pointer;line-height:1}
+.cmp-close:hover{color:#fff}
+.cmp-field{padding:8px 14px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:8px}
+.cmp-field-label{font-size:12px;color:var(--ink4);font-weight:500;width:30px;flex-shrink:0}
+.cmp-field input{flex:1;border:none;outline:none;font-family:var(--sans);font-size:13px;color:var(--ink);background:transparent}
+.cmp-field input::placeholder{color:var(--ink4)}
+.cmp-body textarea{width:100%;border:none;outline:none;padding:14px;font-family:var(--sans);font-size:13px;color:var(--ink);line-height:1.7;resize:none;background:transparent;height:160px}
+.cmp-footer{padding:10px 14px;border-top:1px solid var(--border2);display:flex;align-items:center;justify-content:space-between}
+.cmp-send{padding:8px 20px;border-radius:8px;background:var(--coral);color:#fff;border:none;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;transition:background .15s}
+.cmp-send:hover{background:var(--coral2)}
+.cmp-extras{display:flex;gap:8px;color:var(--ink4);font-size:16px}
+.cmp-extra-btn{cursor:pointer;transition:color .1s}
+.cmp-extra-btn:hover{color:var(--ink)}
+
+/* TOAST */
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--ink);color:#fff;padding:11px 20px;border-radius:9px;font-size:13px;font-weight:500;opacity:0;transition:transform .3s,opacity .3s;z-index:300;pointer-events:none}
+#toast.show{transform:translateX(-50%) translateY(0);opacity:1}
+
+/* EMPTY / PLACEHOLDER */
+.ed-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--ink4);gap:10px}
+.ed-empty-icon{font-size:48px;opacity:.3}
+.ed-empty-text{font-family:var(--serif);font-size:18px;font-weight:400;font-style:italic}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div id="topbar">
+  <div class="tb-logo"><div class="tb-dot"></div>InboxMY</div>
+  <div class="tb-search">
+    <span class="search-icon">⌕</span>
+    <input type="text" placeholder="Search emails, bills, receipts..." id="search-input" oninput="filterEmails(this.value)">
+  </div>
+  <div class="tb-right">
+    <button class="tb-lang active" id="lang-en" onclick="setLang('en')">EN</button>
+    <button class="tb-lang" id="lang-bm" onclick="setLang('bm')">BM</button>
+    <div class="tb-avatar" title="Amirul Hakim">A</div>
+  </div>
+</div>
+
+<div id="shell">
+
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <button class="sb-compose" onclick="openCompose()" id="compose-btn">+ Compose</button>
+
+    <div class="sb-section">
+      <div class="sb-item active" onclick="setFolder('inbox', this)" id="folder-inbox">
+        <span class="sb-icon">📥</span>
+        <span id="lbl-inbox">All inbox</span>
+        <span class="sb-badge" id="badge-inbox">12</span>
+      </div>
+      <div class="sb-item" onclick="setFolder('bills', this)" id="folder-bills">
+        <span class="sb-icon">⚡</span>
+        <span id="lbl-bills">Bills</span>
+        <span class="sb-badge" style="background:var(--amber);color:#fff" id="badge-bills">3</span>
+      </div>
+      <div class="sb-item" onclick="setFolder('govt', this)" id="folder-govt">
+        <span class="sb-icon">🏛️</span>
+        <span id="lbl-govt">Government</span>
+        <span class="sb-badge" style="background:var(--teal);color:#fff">1</span>
+      </div>
+      <div class="sb-item" onclick="setFolder('receipts', this)" id="folder-receipts">
+        <span class="sb-icon">🛍️</span>
+        <span id="lbl-receipts">Receipts</span>
+        <span class="sb-badge grey">4</span>
+      </div>
+      <div class="sb-item" onclick="setFolder('work', this)" id="folder-work">
+        <span class="sb-icon">💼</span>
+        <span id="lbl-work">Work</span>
+        <span class="sb-badge" id="badge-work">4</span>
+      </div>
+      <div class="sb-item" onclick="setFolder('sent', this)">
+        <span class="sb-icon">📤</span>
+        <span id="lbl-sent">Sent</span>
+      </div>
+      <div class="sb-item" onclick="setFolder('spam', this)">
+        <span class="sb-icon">🚫</span>
+        <span id="lbl-spam">Spam</span>
+        <span class="sb-badge grey">8</span>
+      </div>
+    </div>
+
+    <div class="sb-sep"></div>
+
+    <div class="sb-section">
+      <div class="sb-label" id="lbl-accounts">Accounts</div>
+      <div class="sb-account active" onclick="setAccount('all', this)">
+        <div class="acct-dot" style="background:var(--coral)"></div>
+        <div class="acct-name" id="lbl-all-accounts">All accounts</div>
+        <div class="acct-count">12</div>
+      </div>
+      <div class="sb-account" onclick="setAccount('gmail', this)">
+        <div class="acct-dot" style="background:#4285f4"></div>
+        <div class="acct-name">amirul@gmail.com</div>
+        <div class="acct-count">6</div>
+      </div>
+      <div class="sb-account" onclick="setAccount('outlook', this)">
+        <div class="acct-dot" style="background:#0078d4"></div>
+        <div class="acct-name">amirul@outlook.com</div>
+        <div class="acct-count">3</div>
+      </div>
+      <div class="sb-account" onclick="setAccount('work', this)">
+        <div class="acct-dot" style="background:var(--purple)"></div>
+        <div class="acct-name">a.hakim@company.my</div>
+        <div class="acct-count">3</div>
+      </div>
+      <div class="sb-account" style="opacity:.5;cursor:default;padding:6px 10px">
+        <div style="font-size:11px;color:var(--ink4);width:100%">+ Add account (2 more slots)</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EMAIL LIST -->
+  <div id="email-list">
+    <div class="el-header">
+      <div class="el-title" id="folder-title">All inbox</div>
+      <div class="el-count" id="email-count">12 emails</div>
+    </div>
+    <div class="el-filters">
+      <div class="el-filter active" onclick="setFilter('all', this)" id="filter-all">All</div>
+      <div class="el-filter" onclick="setFilter('unread', this)">Unread</div>
+      <div class="el-filter" onclick="setFilter('bills', this)">Bills</div>
+      <div class="el-filter" onclick="setFilter('govt', this)">Govt</div>
+      <div class="el-filter" onclick="setFilter('receipts', this)">Receipts</div>
+    </div>
+    <div class="el-items" id="el-items"></div>
+  </div>
+
+  <!-- EMAIL DETAIL -->
+  <div id="email-detail">
+    <div class="ed-empty" id="ed-empty">
+      <div class="ed-empty-icon">✉</div>
+      <div class="ed-empty-text">Select an email to read</div>
+    </div>
+    <div id="ed-content" style="display:none;flex-direction:column;height:100%;overflow:hidden">
+      <div class="ed-header">
+        <div class="ed-subject" id="ed-subject">—</div>
+        <div class="ed-meta-row">
+          <div class="ed-from-avatar" id="ed-avatar"></div>
+          <div class="ed-from-info">
+            <div class="ed-from-name" id="ed-from-name">—</div>
+            <div class="ed-from-email" id="ed-from-email">—</div>
+          </div>
+          <div class="ed-timestamp" id="ed-timestamp">—</div>
+          <div class="ed-tags" id="ed-tags"></div>
+          <div class="ed-actions">
+            <button class="ed-btn" onclick="showToast('Archived!')">Archive</button>
+            <button class="ed-btn" onclick="showToast('Marked spam!')">Spam</button>
+            <button class="ed-btn primary" onclick="openCompose()">Reply</button>
+          </div>
+        </div>
+      </div>
+      <div id="ed-smart-card"></div>
+      <div class="ed-body">
+        <div class="email-content" id="ed-body-content"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div id="right-panel">
+    <div class="rp-section">
+      <div class="rp-title" id="lbl-bills-due">Bills due soon</div>
+      <div class="bill-item" onclick="selectEmailById('tnb')">
+        <div class="bi-icon">⚡</div>
+        <div class="bi-info">
+          <div class="bi-name">TNB eBill</div>
+          <div class="bi-due" id="due-tnb">Due in 5 days</div>
+        </div>
+        <div class="bi-amt urgent">RM142.80</div>
+      </div>
+      <div class="bill-item" onclick="selectEmailById('unifi')">
+        <div class="bi-icon">📡</div>
+        <div class="bi-info">
+          <div class="bi-name">Unifi by TM</div>
+          <div class="bi-due">Due in 11 days</div>
+        </div>
+        <div class="bi-amt">RM129.00</div>
+      </div>
+      <div class="bill-item">
+        <div class="bi-icon">📱</div>
+        <div class="bi-info">
+          <div class="bi-name">Celcom Postpaid</div>
+          <div class="bi-due">Due in 18 days</div>
+        </div>
+        <div class="bi-amt">RM58.00</div>
+      </div>
+    </div>
+
+    <div class="rp-section">
+      <div class="rp-title">Recent orders</div>
+      <div class="order-item" onclick="selectEmailById('shopee')">
+        <div class="oi-shop">Shopee</div>
+        <div class="oi-name">Mechanical Keyboard TKL</div>
+        <div class="oi-status"><div class="oi-dot"></div>Shipped · arriving Thu</div>
+      </div>
+      <div class="order-item" onclick="selectEmailById('lazada')">
+        <div class="oi-shop">Lazada</div>
+        <div class="oi-name">USB-C Hub 7-in-1</div>
+        <div class="oi-status"><div class="oi-dot" style="background:var(--amber)"></div>Processing</div>
+      </div>
+      <div class="order-item">
+        <div class="oi-shop">Shopee</div>
+        <div class="oi-name">Minyak gamat lotion 200ml</div>
+        <div class="oi-status"><div class="oi-dot" style="background:var(--ink4)"></div>Delivered · Oct 18</div>
+      </div>
+    </div>
+
+    <div class="rp-section">
+      <div class="rp-title">This month</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:10px;text-align:center">
+          <div style="font-family:var(--serif);font-size:19px;font-weight:600;color:var(--coral)">RM329</div>
+          <div style="font-size:10px;color:var(--ink4);margin-top:2px" id="lbl-bills-total">Bills total</div>
+        </div>
+        <div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:10px;text-align:center">
+          <div style="font-family:var(--serif);font-size:19px;font-weight:600;color:var(--purple)">RM187</div>
+          <div style="font-size:10px;color:var(--ink4);margin-top:2px" id="lbl-shopping">Shopping</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- COMPOSE -->
+<div id="compose">
+  <div class="cmp-header">
+    <div class="cmp-title" id="lbl-new-message">New message</div>
+    <button class="cmp-close" onclick="closeCompose()">×</button>
+  </div>
+  <div class="cmp-field">
+    <div class="cmp-field-label" id="lbl-to">To</div>
+    <input type="text" placeholder="recipient@email.com" id="compose-to">
+  </div>
+  <div class="cmp-field">
+    <div class="cmp-field-label" id="lbl-subject-compose">Subject</div>
+    <input type="text" placeholder="Email subject" id="compose-subject">
+  </div>
+  <div class="cmp-body">
+    <textarea placeholder="Write your message..." id="compose-body"></textarea>
+  </div>
+  <div class="cmp-footer">
+    <button class="cmp-send" onclick="sendEmail()" id="lbl-send">Send</button>
+    <div class="cmp-extras">
+      <span class="cmp-extra-btn" title="Attach file" onclick="showToast('Attach file coming soon!')">📎</span>
+      <span class="cmp-extra-btn" title="Discard" onclick="closeCompose()">🗑</span>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const EMAILS = [
+  {
+    id:'tnb', tag:'bill', unread:true, account:'gmail',
+    from:'Tenaga Nasional Berhad', email:'billing@tnb.com.my',
+    subject:'eBill untuk bulan Oktober 2025',
+    preview:'Amaun perlu dibayar: RM142.80 sebelum 30 Oktober',
+    time:'9:41am', timestamp:'Tue, 22 Oct 2025, 9:41am',
+    color:'#d63031',initial:'T',
+    smartType:'bill',
+    smart:{name:'TNB eBill', amount:'RM142.80', acct:'NO. AKAUN: 2108-4431-2', due:'30 Oktober 2025', period:'Sep 2025'},
+    body:`<p>Pelanggan Yang Dihormati,</p>
+<p>Sila ambil perhatian bahawa bil elektrik anda untuk bulan <strong>September 2025</strong> telah sedia untuk pembayaran.</p>
+<div class="bill-box">
+  <div class="bb-item"><div class="bb-key">No. Akaun</div><div class="bb-val">2108-4431-2</div></div>
+  <div class="bb-item"><div class="bb-key">Tempoh</div><div class="bb-val">Sep 2025</div></div>
+  <div class="bb-item"><div class="bb-key">Amaun Perlu Dibayar</div><div class="bb-val big">RM142.80</div></div>
+  <div class="bb-item"><div class="bb-key">Tarikh Akhir</div><div class="bb-val">30 Oktober 2025</div></div>
+</div>
+<p>Sila pastikan pembayaran dibuat sebelum tarikh akhir untuk mengelakkan penggantungan bekalan.</p>
+<p>Kaedah pembayaran yang diterima: <span class="highlight">JomPAY</span>, Maybank2u, CIMB Clicks, dan kaunter TNB.</p>
+<p>Terima kasih kerana menjadi pelanggan setia TNB.</p>`
+  },
+  {
+    id:'lhdn', tag:'govt', unread:true, account:'gmail',
+    from:'LHDN — e-Filing', email:'noreply@hasil.gov.my',
+    subject:'Pengesahan Penerimaan Borang BE 2024',
+    preview:'Borang cukai pendapatan anda telah berjaya diterima',
+    time:'Yesterday', timestamp:'Mon, 21 Oct 2025, 3:12pm',
+    color:'#0d7a6e',initial:'L',
+    smartType:'govt',
+    body:`<p>Tuan/Puan,</p>
+<p>Pihak LHDN dengan sukacitanya memaklumkan bahawa <strong>Borang BE 2024</strong> anda telah berjaya diterima oleh sistem e-Filing kami.</p>
+<div class="bill-box">
+  <div class="bb-item"><div class="bb-key">No. Rujukan</div><div class="bb-val">BE-2024-7734821</div></div>
+  <div class="bb-item"><div class="bb-key">Status</div><div class="bb-val" style="color:var(--teal)">Diterima</div></div>
+  <div class="bb-item"><div class="bb-key">Tarikh Hantar</div><div class="bb-val">21 Okt 2025</div></div>
+  <div class="bb-item"><div class="bb-key">Cukai Taksiran</div><div class="bb-val">RM0.00</div></div>
+</div>
+<p>Sila simpan e-mel ini sebagai rekod. Sebarang pertanyaan boleh dirujuk ke HASIL Care Line: <span class="highlight">1-800-88-5436</span>.</p>`
+  },
+  {
+    id:'shopee', tag:'shop', unread:true, account:'gmail',
+    from:'Shopee Malaysia', email:'no-reply@shopee.com.my',
+    subject:'Order confirmed! Resit #2509163847',
+    preview:'Mechanical Keyboard TKL — RM189.00',
+    time:'Mon', timestamp:'Mon, 21 Oct 2025, 10:08am',
+    color:'#ee4d2d',initial:'S',
+    smartType:'receipt',
+    smart:{platform:'Shopee', order:'#2509163847', item:'Mechanical Keyboard TKL Blue Switch', amount:'RM189.00', eta:'23–25 Oct 2025'},
+    body:`<p>Hi Amirul! Your order has been confirmed. 🎉</p>
+<div class="bill-box">
+  <div class="bb-item"><div class="bb-key">Order No.</div><div class="bb-val">#2509163847</div></div>
+  <div class="bb-item"><div class="bb-key">Platform</div><div class="bb-val">Shopee MY</div></div>
+  <div class="bb-item"><div class="bb-key">Item</div><div class="bb-val">Mechanical Keyboard TKL</div></div>
+  <div class="bb-item"><div class="bb-key">Total Paid</div><div class="bb-val big">RM189.00</div></div>
+</div>
+<p>Your order is currently being prepared by the seller. Estimated delivery: <span class="highlight">23–25 Oct 2025</span>.</p>
+<p>You can track your order directly in the Shopee app.</p>`
+  },
+  {
+    id:'weilin', tag:'work', unread:false, account:'work',
+    from:'Wei Lin (Boss)', email:'weilin@company.my',
+    subject:'Re: Q4 deck — need by Thursday',
+    preview:'Thanks, looks good. Can you add the KPI slide?',
+    time:'Mon', timestamp:'Mon, 21 Oct 2025, 8:55am',
+    color:'#2a6abf',initial:'W',
+    body:`<p>Thanks Amirul, the deck looks good overall.</p>
+<p>Can you add a KPI slide after slide 4 — just quarterly targets vs actuals for Q1-Q3. Grab the numbers from the shared Google Sheet.</p>
+<p>Also the font on the cover page looks off on projectors, maybe bump it to 36pt?</p>
+<p>Need it by <span class="highlight">Thursday 5pm</span> latest — board meeting is Friday morning.</p>
+<p>Thanks,<br>Wei Lin</p>`
+  },
+  {
+    id:'unifi', tag:'bill', unread:false, account:'outlook',
+    from:'Unifi by TM', email:'billing@unifi.com.my',
+    subject:'Your October invoice is ready',
+    preview:'Invoice INV-2025-10-38821 — RM129.00',
+    time:'Sun', timestamp:'Sun, 20 Oct 2025, 6:00am',
+    color:'#00b4d8',initial:'U',
+    smartType:'bill',
+    smart:{name:'Unifi Invoice', amount:'RM129.00', acct:'INV-2025-10-38821', due:'1 November 2025', period:'Oct 2025'},
+    body:`<p>Dear Amirul Hakim,</p>
+<p>Your Unifi invoice for <strong>October 2025</strong> is now available.</p>
+<div class="bill-box">
+  <div class="bb-item"><div class="bb-key">Invoice No.</div><div class="bb-val">INV-2025-10-38821</div></div>
+  <div class="bb-item"><div class="bb-key">Plan</div><div class="bb-val">Unifi 300Mbps</div></div>
+  <div class="bb-item"><div class="bb-key">Amount Due</div><div class="bb-val big">RM129.00</div></div>
+  <div class="bb-item"><div class="bb-key">Due Date</div><div class="bb-val">1 November 2025</div></div>
+</div>
+<p>Pay via <span class="highlight">JomPAY (Biller Code 88050)</span>, Maybank2u, or MyUnifi app.</p>`
+  },
+  {
+    id:'lazada', tag:'shop', unread:false, account:'gmail',
+    from:'Lazada Malaysia', email:'noreply@lazada.com.my',
+    subject:'Your order is confirmed — USB-C Hub 7-in-1',
+    preview:'Order #LZ-MY-29183-2025 · RM58.90',
+    time:'Sun', timestamp:'Sun, 20 Oct 2025, 11:22am',
+    color:'#f46e07',initial:'L',
+    smartType:'receipt',
+    smart:{platform:'Lazada', order:'#LZ-MY-29183-2025', item:'USB-C Hub 7-in-1', amount:'RM58.90', eta:'22–24 Oct 2025'},
+    body:`<p>Hello Amirul,</p>
+<p>Thank you for your order on Lazada!</p>
+<div class="bill-box">
+  <div class="bb-item"><div class="bb-key">Order No.</div><div class="bb-val">#LZ-MY-29183-2025</div></div>
+  <div class="bb-item"><div class="bb-key">Item</div><div class="bb-val">USB-C Hub 7-in-1 (Silver)</div></div>
+  <div class="bb-item"><div class="bb-key">Payment</div><div class="bb-val">TnG eWallet</div></div>
+  <div class="bb-item"><div class="bb-key">Total Paid</div><div class="bb-val big">RM58.90</div></div>
+</div>
+<p>Estimated delivery: <span class="highlight">22–24 October 2025</span>.</p>`
+  },
+  {
+    id:'myeg', tag:'govt', unread:false, account:'outlook',
+    from:'MyEG Services', email:'noreply@myeg.com.my',
+    subject:'Pembaharuan Lesen Memandu — Berjaya',
+    preview:'Lesen memandu anda telah diperbaharui sehingga 2030',
+    time:'Sat', timestamp:'Sat, 19 Oct 2025, 2:41pm',
+    color:'#0d7a6e',initial:'M',
+    body:`<p>Tuan Amirul Hakim,</p>
+<p>Permohonan pembaharuan lesen memandu anda melalui MyEG telah berjaya diproses.</p>
+<div class="bill-box">
+  <div class="bb-item"><div class="bb-key">No. Rujukan</div><div class="bb-val">MEG-2025-0931827</div></div>
+  <div class="bb-item"><div class="bb-key">Jenis Lesen</div><div class="bb-val">D (5 tahun)</div></div>
+  <div class="bb-item"><div class="bb-key">Sah Sehingga</div><div class="bb-val" style="color:var(--teal)">Oktober 2030</div></div>
+  <div class="bb-item"><div class="bb-key">Yuran Dibayar</div><div class="bb-val big">RM85.00</div></div>
+</div>
+<p>Lesen fizikal anda akan dihantar ke alamat berdaftar dalam masa <span class="highlight">7–14 hari bekerja</span>.</p>`
+  },
+  {
+    id:'celcom', tag:'bill', unread:false, account:'gmail',
+    from:'Celcom Axiata', email:'billing@celcom.com.my',
+    subject:'Bil Postpaid Oktober 2025 — RM58.00',
+    preview:'Tarikh akhir pembayaran: 10 November 2025',
+    time:'Fri', timestamp:'Fri, 18 Oct 2025, 8:00am',
+    color:'#6c2bd9',initial:'C',
+    smartType:'bill',
+    smart:{name:'Celcom Postpaid', amount:'RM58.00', acct:'016-382 XXXX', due:'10 November 2025', period:'Oct 2025'},
+    body:`<p>Pelanggan yang dihormati,</p>
+<p>Bil Postpaid Celcom anda untuk bulan Oktober 2025 telah dikeluarkan.</p>
+<div class="bill-box">
+  <div class="bb-item"><div class="bb-key">No. Telefon</div><div class="bb-val">016-382 XXXX</div></div>
+  <div class="bb-item"><div class="bb-key">Plan</div><div class="bb-val">Celcom FIRST Platinum</div></div>
+  <div class="bb-item"><div class="bb-key">Jumlah Bil</div><div class="bb-val big">RM58.00</div></div>
+  <div class="bb-item"><div class="bb-key">Tarikh Akhir</div><div class="bb-val">10 November 2025</div></div>
+</div>
+<p>Bayar melalui <span class="highlight">JomPAY (Kod Biller: 17059)</span>, atau melalui apl MyCelcom.</p>`
+  },
+];
+
+// ── LANG ──────────────────────────────
+const LABELS = {
+  en: { inbox:'All inbox', bills:'Bills', govt:'Government', receipts:'Receipts', work:'Work', sent:'Sent', spam:'Spam', accounts:'Accounts', 'all-accounts':'All accounts', 'compose-btn':'+ Compose', 'bills-due':'Bills due soon', 'bills-total':'Bills total', shopping:'Shopping', 'new-message':'New message', to:'To', 'subject-compose':'Subject', send:'Send', },
+  bm: { inbox:'Semua peti masuk', bills:'Bil', govt:'Kerajaan', receipts:'Resit', work:'Kerja', sent:'Dihantar', spam:'Spam', accounts:'Akaun', 'all-accounts':'Semua akaun', 'compose-btn':'+ Karang', 'bills-due':'Bil perlu dibayar', 'bills-total':'Jumlah bil', shopping:'Membeli-belah', 'new-message':'Mesej baru', to:'Kepada', 'subject-compose':'Tajuk', send:'Hantar', },
+};
+let lang = 'en';
+function setLang(l) {
+  lang = l;
+  document.getElementById('lang-en').className = 'tb-lang' + (l==='en'?' active':'');
+  document.getElementById('lang-bm').className = 'tb-lang' + (l==='bm'?' active':'');
+  const lb = LABELS[l];
+  Object.entries(lb).forEach(([k,v]) => {
+    const el = document.getElementById('lbl-'+k);
+    if (el) el.textContent = v;
+  });
+  document.getElementById('compose-btn').textContent = lb['compose-btn'];
+  document.getElementById('lbl-send').textContent = lb['send'];
+  document.getElementById('lbl-new-message').textContent = lb['new-message'];
+  document.getElementById('lbl-to').textContent = lb['to'];
+  document.getElementById('lbl-subject-compose').textContent = lb['subject-compose'];
+}
+
+// ── STATE ─────────────────────────────
+let currentFolder = 'inbox';
+let currentFilter = 'all';
+let currentSearch = '';
+let selectedId = null;
+
+function getVisibleEmails() {
+  let list = EMAILS;
+  if (currentFolder === 'bills') list = list.filter(e => e.tag === 'bill');
+  else if (currentFolder === 'govt') list = list.filter(e => e.tag === 'govt');
+  else if (currentFolder === 'receipts') list = list.filter(e => e.tag === 'shop');
+  else if (currentFolder === 'work') list = list.filter(e => e.tag === 'work');
+  if (currentFilter === 'unread') list = list.filter(e => e.unread);
+  else if (currentFilter === 'bills') list = list.filter(e => e.tag === 'bill');
+  else if (currentFilter === 'govt') list = list.filter(e => e.tag === 'govt');
+  else if (currentFilter === 'receipts') list = list.filter(e => e.tag === 'shop');
+  if (currentSearch) {
+    const q = currentSearch.toLowerCase();
+    list = list.filter(e => e.from.toLowerCase().includes(q) || e.subject.toLowerCase().includes(q) || e.preview.toLowerCase().includes(q));
+  }
+  return list;
+}
+
+function renderList() {
+  const visible = getVisibleEmails();
+  const wrap = document.getElementById('el-items');
+  wrap.innerHTML = '';
+  document.getElementById('email-count').textContent = visible.length + ' emails';
+  if (!visible.length) {
+    wrap.innerHTML = '<div style="padding:32px;text-align:center;color:var(--ink4);font-size:13px">No emails found</div>';
+    return;
+  }
+  visible.forEach(e => {
+    const row = document.createElement('div');
+    row.className = 'email-row ' + (e.unread ? 'unread' : 'read') + (selectedId === e.id ? ' selected' : '');
+    row.id = 'row-' + e.id;
+    const tagHtml = {
+      bill:`<div class="er-tag tag-bill">Bill</div>`,
+      govt:`<div class="er-tag tag-govt">Govt</div>`,
+      shop:`<div class="er-tag tag-shop">Receipt</div>`,
+      work:`<div class="er-tag tag-work">Work</div>`,
+    }[e.tag] || '';
+    row.innerHTML = `
+      <div class="er-avatar" style="background:${e.color}">${e.initial}</div>
+      <div class="er-body">
+        <div class="er-from">${e.from}</div>
+        <div class="er-subject">${e.subject}</div>
+        <div class="er-preview">${e.preview}</div>
+      </div>
+      <div class="er-meta">
+        <div class="er-time">${e.time}</div>
+        ${tagHtml}
+        ${e.unread ? '<div class="er-unread-dot"></div>' : ''}
+      </div>`;
+    row.onclick = () => selectEmail(e.id);
+    wrap.appendChild(row);
+  });
+}
+
+function selectEmail(id) {
+  selectedId = id;
+  const e = EMAILS.find(x => x.id === id);
+  if (!e) return;
+  e.unread = false;
+
+  document.querySelectorAll('.email-row').forEach(r => r.classList.remove('selected'));
+  const row = document.getElementById('row-' + id);
+  if (row) { row.classList.add('selected'); row.classList.remove('unread'); row.querySelector('.er-from').style.fontWeight = '500'; }
+  if (row) { const dot = row.querySelector('.er-unread-dot'); if(dot) dot.remove(); }
+
+  document.getElementById('ed-empty').style.display = 'none';
+  const content = document.getElementById('ed-content');
+  content.style.display = 'flex';
+
+  document.getElementById('ed-subject').textContent = e.subject;
+  const av = document.getElementById('ed-avatar');
+  av.textContent = e.initial; av.style.background = e.color;
+  document.getElementById('ed-from-name').textContent = e.from;
+  document.getElementById('ed-from-email').textContent = `<${e.email}>`;
+  document.getElementById('ed-timestamp').textContent = e.timestamp;
+
+  const tagMap = { bill:`<div class="ed-tag tag-bill">Bill</div>`, govt:`<div class="ed-tag tag-govt">Government</div>`, shop:`<div class="ed-tag tag-shop">Receipt</div>`, work:`<div class="ed-tag tag-work">Work</div>` };
+  document.getElementById('ed-tags').innerHTML = tagMap[e.tag] || '';
+  document.getElementById('ed-body-content').innerHTML = e.body;
+
+  // Smart card
+  const sc = document.getElementById('ed-smart-card');
+  if (e.smart && e.smartType === 'bill') {
+    sc.innerHTML = `<div class="smart-card">
+      <div class="sc-header"><div class="sc-icon">⚡</div><div><div class="sc-label">${e.smart.name} — extracted automatically by InboxMY</div><div class="sc-sublabel">Tap to add payment reminder</div></div></div>
+      <div class="sc-body">
+        <div class="sc-stat"><span class="sc-val coral">${e.smart.amount}</span><div class="sc-key">Amount due</div></div>
+        <div class="sc-stat"><span class="sc-val">${e.smart.due}</span><div class="sc-key">Due date</div></div>
+        <div class="sc-stat"><span class="sc-val">${e.smart.period}</span><div class="sc-key">Period</div></div>
+      </div></div>`;
+  } else if (e.smart && e.smartType === 'receipt') {
+    sc.innerHTML = `<div class="smart-card">
+      <div class="sc-header"><div class="sc-icon">🛍️</div><div><div class="sc-label">${e.smart.platform} order — parsed by InboxMY</div><div class="sc-sublabel">${e.smart.order}</div></div></div>
+      <div class="sc-body">
+        <div class="sc-stat"><span class="sc-val amber">${e.smart.amount}</span><div class="sc-key">Total paid</div></div>
+        <div class="sc-stat"><span class="sc-val teal">${e.smart.eta}</span><div class="sc-key">Est. delivery</div></div>
+      </div></div>`;
+  } else { sc.innerHTML = ''; }
+}
+
+function selectEmailById(id) { selectEmail(id); }
+
+function setFolder(f, el) {
+  currentFolder = f;
+  currentFilter = 'all';
+  document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('active'));
+  if (el) el.classList.add('active');
+  const titles = { inbox:'All inbox', bills:'Bills', govt:'Government', receipts:'Receipts', work:'Work', sent:'Sent', spam:'Spam' };
+  document.getElementById('folder-title').textContent = titles[f] || f;
+  document.querySelectorAll('.el-filter').forEach(i => i.classList.remove('active'));
+  document.getElementById('filter-all').classList.add('active');
+  renderList();
+}
+
+function setAccount(a, el) {
+  document.querySelectorAll('.sb-account').forEach(i => i.classList.remove('active'));
+  if (el) el.classList.add('active');
+  renderList();
+}
+
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('.el-filter').forEach(i => i.classList.remove('active'));
+  if (el) el.classList.add('active');
+  renderList();
+}
+
+function filterEmails(q) { currentSearch = q; renderList(); }
+
+// ── COMPOSE ───────────────────────────
+function openCompose() { document.getElementById('compose').classList.add('show'); }
+function closeCompose() { document.getElementById('compose').classList.remove('show'); }
+function sendEmail() {
+  const to = document.getElementById('compose-to').value;
+  const sub = document.getElementById('compose-subject').value;
+  if (!to) { showToast('Please enter a recipient'); return; }
+  closeCompose();
+  document.getElementById('compose-to').value='';
+  document.getElementById('compose-subject').value='';
+  document.getElementById('compose-body').value='';
+  showToast('Email sent successfully!');
+}
+
+// ── TOAST ─────────────────────────────
+let toastTmr;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  if (toastTmr) clearTimeout(toastTmr);
+  toastTmr = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ── INIT ──────────────────────────────
+renderList();
+setTimeout(() => selectEmail('tnb'), 100);
+</script>
+</body>
+</html>
