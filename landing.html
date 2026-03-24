@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InboxMY — One inbox for every Malaysian email account</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --cream: #faf8f3;
+  --cream2: #f3f0e8;
+  --cream3: #ebe7db;
+  --ink: #1a1612;
+  --ink2: #3d3530;
+  --ink3: #7a7068;
+  --coral: #e8402a;
+  --coral2: #ff5c3e;
+  --coral-light: #fdf0ed;
+  --teal: #0d7a6e;
+  --teal-light: #e8f5f3;
+  --amber: #c97a1a;
+  --amber-light: #fdf5e8;
+  --border: rgba(26,22,18,.1);
+  --border2: rgba(26,22,18,.06);
+  --serif: 'Fraunces', Georgia, serif;
+  --sans: 'Plus Jakarta Sans', sans-serif;
+  --r: 12px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--cream);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* ── NAV ─────────────────────────────── */
+nav {
+  position: sticky; top: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 48px;
+  height: 60px;
+  background: rgba(250,248,243,.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border2);
+}
+.nav-logo {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--serif); font-size: 20px; font-weight: 600; color: var(--ink);
+  text-decoration: none;
+}
+.logo-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--coral);
+}
+.nav-links { display: flex; align-items: center; gap: 32px; }
+.nav-links a { font-size: 14px; color: var(--ink3); text-decoration: none; font-weight: 500; transition: color .15s; }
+.nav-links a:hover { color: var(--ink); }
+.nav-cta {
+  padding: 8px 20px; border-radius: 8px;
+  background: var(--coral); color: #fff;
+  font-size: 14px; font-weight: 600;
+  text-decoration: none; border: none; cursor: pointer;
+  transition: background .15s, transform .1s;
+}
+.nav-cta:hover { background: var(--coral2); transform: translateY(-1px); }
+
+/* ── HERO ────────────────────────────── */
+.hero {
+  padding: 100px 48px 80px;
+  max-width: 1100px; margin: 0 auto;
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 64px; align-items: center;
+}
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--coral-light); color: var(--coral);
+  font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+  padding: 5px 12px; border-radius: 999px;
+  margin-bottom: 24px;
+}
+.hero-eyebrow::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--coral); }
+.hero h1 {
+  font-family: var(--serif);
+  font-size: 56px; font-weight: 400; line-height: 1.1;
+  color: var(--ink);
+  margin-bottom: 24px;
+}
+.hero h1 em { font-style: italic; color: var(--coral); }
+.hero-sub {
+  font-size: 17px; color: var(--ink3); line-height: 1.7;
+  margin-bottom: 36px; max-width: 440px;
+}
+.hero-actions { display: flex; align-items: center; gap: 14px; margin-bottom: 40px; }
+.btn-primary {
+  padding: 13px 28px; border-radius: 10px;
+  background: var(--coral); color: #fff;
+  font-size: 15px; font-weight: 600;
+  border: none; cursor: pointer; text-decoration: none;
+  transition: background .15s, transform .1s, box-shadow .15s;
+  box-shadow: 0 2px 12px rgba(232,64,42,.25);
+}
+.btn-primary:hover { background: var(--coral2); transform: translateY(-2px); box-shadow: 0 4px 20px rgba(232,64,42,.3); }
+.btn-ghost {
+  padding: 13px 24px; border-radius: 10px;
+  background: transparent; color: var(--ink2);
+  font-size: 15px; font-weight: 500;
+  border: 1.5px solid var(--border); cursor: pointer; text-decoration: none;
+  transition: border-color .15s, background .15s;
+}
+.btn-ghost:hover { border-color: var(--ink3); background: var(--cream2); }
+.hero-proof {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: var(--ink3);
+}
+.proof-avatars { display: flex; }
+.proof-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 2px solid var(--cream);
+  font-size: 11px; font-weight: 600; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  margin-left: -8px;
+}
+.proof-avatar:first-child { margin-left: 0; }
+
+/* ── HERO CARD MOCKUP ──────────────────── */
+.hero-visual { position: relative; }
+.mockup-card {
+  background: #fff;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+  box-shadow: 0 8px 40px rgba(26,22,18,.08), 0 2px 8px rgba(26,22,18,.04);
+  animation: float 5s ease-in-out infinite;
+}
+@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+.mc-bar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 12px 16px;
+  background: var(--cream2);
+  border-bottom: 1px solid var(--border2);
+}
+.mc-dot { width: 10px; height: 10px; border-radius: 50%; }
+.mc-accounts {
+  display: flex; gap: 0;
+  border-bottom: 1px solid var(--border2);
+  overflow: hidden;
+}
+.mc-tab {
+  padding: 10px 14px;
+  font-size: 12px; font-weight: 500; color: var(--ink3);
+  border-right: 1px solid var(--border2);
+  display: flex; align-items: center; gap: 6px;
+  white-space: nowrap;
+}
+.mc-tab.active { background: #fff; color: var(--ink); font-weight: 600; }
+.mc-tab-dot { width: 7px; height: 7px; border-radius: 50%; }
+.mc-emails { padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+.mc-email {
+  display: grid; grid-template-columns: auto 1fr auto;
+  gap: 10px; align-items: start;
+  padding: 10px 10px; border-radius: 8px;
+  cursor: pointer; transition: background .1s;
+}
+.mc-email:hover { background: var(--cream2); }
+.mc-email.unread { background: #fff; }
+.mc-email.read { opacity: .7; }
+.mc-avatar-sm {
+  width: 32px; height: 32px; border-radius: 50%;
+  font-size: 11px; font-weight: 700; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.mc-email-body { min-width: 0; }
+.mc-from { font-size: 12px; font-weight: 600; color: var(--ink); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mc-subject { font-size: 12px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
+.mc-preview { font-size: 11px; color: var(--ink3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mc-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; }
+.mc-time { font-size: 11px; color: var(--ink3); }
+.mc-tag {
+  padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 600;
+  white-space: nowrap;
+}
+.tag-bill { background: var(--amber-light); color: var(--amber); }
+.tag-govt { background: var(--teal-light); color: var(--teal); }
+.tag-shop { background: #f0edff; color: #5c48c9; }
+.tag-work { background: var(--coral-light); color: var(--coral); }
+
+/* floating badge */
+.float-badge {
+  position: absolute;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 14px;
+  box-shadow: 0 4px 20px rgba(26,22,18,.1);
+  font-size: 12px;
+  animation: float2 4s ease-in-out infinite;
+}
+@keyframes float2 { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+.fb-top { top: -18px; right: -20px; display: flex; align-items: center; gap: 8px; }
+.fb-bottom { bottom: 20px; left: -28px; animation-delay: 1.5s; }
+.fb-label { font-weight: 600; color: var(--ink); }
+.fb-sub { font-size: 11px; color: var(--ink3); }
+.fb-val { font-family: var(--serif); font-size: 18px; font-weight: 600; color: var(--teal); }
+
+/* ── LOGOS ───────────────────────────── */
+.logos-section {
+  background: var(--cream2);
+  border-top: 1px solid var(--border2);
+  border-bottom: 1px solid var(--border2);
+  padding: 28px 48px;
+}
+.logos-inner { max-width: 1100px; margin: 0 auto; display: flex; align-items: center; gap: 40px; }
+.logos-label { font-size: 12px; color: var(--ink3); font-weight: 500; white-space: nowrap; }
+.logos-row { display: flex; align-items: center; gap: 32px; flex-wrap: wrap; }
+.logo-item {
+  font-size: 13px; font-weight: 700; color: var(--ink3);
+  letter-spacing: .02em; opacity: .6;
+  transition: opacity .15s;
+}
+.logo-item:hover { opacity: 1; }
+
+/* ── FEATURES ────────────────────────── */
+.features { padding: 96px 48px; max-width: 1100px; margin: 0 auto; }
+.section-label {
+  font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--coral); margin-bottom: 12px;
+}
+.section-title {
+  font-family: var(--serif); font-size: 42px; font-weight: 400; line-height: 1.15;
+  color: var(--ink); margin-bottom: 16px;
+}
+.section-title em { font-style: italic; color: var(--coral); }
+.section-sub { font-size: 17px; color: var(--ink3); max-width: 520px; line-height: 1.7; margin-bottom: 64px; }
+
+.feat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.feat-card {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+  transition: transform .2s, box-shadow .2s;
+}
+.feat-card:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(26,22,18,.08); }
+.feat-icon {
+  width: 44px; height: 44px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; margin-bottom: 18px;
+}
+.feat-name { font-size: 16px; font-weight: 600; color: var(--ink); margin-bottom: 8px; }
+.feat-desc { font-size: 14px; color: var(--ink3); line-height: 1.6; }
+.feat-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.feat-tag {
+  padding: 3px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 600;
+  background: var(--cream2); color: var(--ink3);
+}
+
+/* ── MALAYSIA SECTION ────────────────── */
+.my-section {
+  background: var(--ink);
+  padding: 96px 48px;
+  position: relative; overflow: hidden;
+}
+.my-section::before {
+  content: 'MY';
+  position: absolute; right: -20px; top: 50%; transform: translateY(-50%);
+  font-family: var(--serif); font-size: 320px; font-weight: 700;
+  color: rgba(255,255,255,.03); line-height: 1;
+  pointer-events: none;
+}
+.my-inner { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: center; }
+.my-label { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--coral); margin-bottom: 12px; }
+.my-title { font-family: var(--serif); font-size: 42px; font-weight: 400; line-height: 1.15; color: #fff; margin-bottom: 20px; }
+.my-title em { font-style: italic; color: var(--coral2); }
+.my-sub { font-size: 16px; color: rgba(255,255,255,.55); line-height: 1.7; margin-bottom: 36px; }
+.my-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.my-pill {
+  padding: 7px 14px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.12);
+  font-size: 13px; color: rgba(255,255,255,.7); font-weight: 500;
+  transition: border-color .15s, color .15s;
+}
+.my-pill:hover { border-color: var(--coral); color: #fff; }
+
+.detection-list { display: flex; flex-direction: column; gap: 12px; }
+.det-item {
+  display: flex; align-items: center; gap: 14px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.07);
+  border-radius: 12px; padding: 14px 18px;
+  transition: background .15s;
+}
+.det-item:hover { background: rgba(255,255,255,.07); }
+.det-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; flex-shrink: 0;
+}
+.det-name { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 2px; }
+.det-desc { font-size: 12px; color: rgba(255,255,255,.45); }
+.det-badge {
+  margin-left: auto; padding: 3px 10px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+}
+.db-auto { background: rgba(13,122,110,.3); color: #4dd9c8; }
+.db-smart { background: rgba(232,64,42,.25); color: #ff8068; }
+.db-new { background: rgba(201,122,26,.25); color: #f0b85a; }
+
+/* ── PRICING ─────────────────────────── */
+.pricing { padding: 96px 48px; max-width: 900px; margin: 0 auto; text-align: center; }
+.pricing .section-sub { margin: 0 auto 64px; }
+.pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; text-align: left; }
+.plan {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 16px; padding: 28px;
+  position: relative;
+  transition: transform .2s, box-shadow .2s;
+}
+.plan:hover { transform: translateY(-4px); box-shadow: 0 12px 40px rgba(26,22,18,.08); }
+.plan.featured {
+  border-color: var(--coral);
+  border-width: 2px;
+}
+.plan-badge {
+  position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+  background: var(--coral); color: #fff;
+  font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase;
+  padding: 4px 14px; border-radius: 999px;
+  white-space: nowrap;
+}
+.plan-name { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); margin-bottom: 16px; }
+.plan-price {
+  font-family: var(--serif); font-size: 42px; font-weight: 400; color: var(--ink);
+  line-height: 1; margin-bottom: 4px;
+}
+.plan-price sup { font-size: 18px; vertical-align: super; }
+.plan-price sub { font-size: 14px; font-family: var(--sans); color: var(--ink3); }
+.plan-period { font-size: 13px; color: var(--ink3); margin-bottom: 24px; }
+.plan-sep { height: 1px; background: var(--border2); margin-bottom: 20px; }
+.plan-features { display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; }
+.pf { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--ink2); line-height: 1.5; }
+.pf-check { color: var(--teal); font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+.plan-btn {
+  display: block; width: 100%; padding: 11px;
+  border-radius: 9px; text-align: center;
+  font-size: 14px; font-weight: 600;
+  border: 1.5px solid var(--border); background: transparent; color: var(--ink);
+  cursor: pointer; text-decoration: none;
+  transition: all .15s;
+}
+.plan-btn:hover { border-color: var(--ink3); background: var(--cream2); }
+.plan.featured .plan-btn { background: var(--coral); color: #fff; border-color: var(--coral); }
+.plan.featured .plan-btn:hover { background: var(--coral2); border-color: var(--coral2); }
+
+/* ── CTA ─────────────────────────────── */
+.cta-section {
+  background: var(--cream2); border-top: 1px solid var(--border2);
+  padding: 96px 48px; text-align: center;
+}
+.cta-section .section-title { font-size: 48px; margin-bottom: 20px; }
+.cta-section .section-sub { margin: 0 auto 40px; }
+.cta-form { display: flex; justify-content: center; gap: 10px; max-width: 420px; margin: 0 auto; }
+.cta-input {
+  flex: 1; padding: 13px 16px; border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: #fff; font-family: var(--sans); font-size: 15px; color: var(--ink);
+  outline: none; transition: border-color .15s;
+}
+.cta-input:focus { border-color: var(--coral); }
+.cta-input::placeholder { color: var(--ink3); }
+
+/* ── FOOTER ──────────────────────────── */
+footer {
+  border-top: 1px solid var(--border2);
+  padding: 32px 48px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.footer-logo { font-family: var(--serif); font-size: 18px; font-weight: 600; color: var(--ink); }
+.footer-links { display: flex; gap: 24px; }
+.footer-links a { font-size: 13px; color: var(--ink3); text-decoration: none; transition: color .15s; }
+.footer-links a:hover { color: var(--ink); }
+.footer-copy { font-size: 13px; color: var(--ink3); }
+
+/* ── ANIMATIONS ──────────────────────── */
+@keyframes fadeUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+.hero > * { animation: fadeUp .6s ease both; }
+.hero > *:nth-child(2) { animation-delay: .15s; }
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="#">
+    <div class="logo-dot"></div>
+    InboxMY
+  </a>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#malaysia">For Malaysians</a>
+    <a href="#pricing">Pricing</a>
+  </div>
+  <a class="nav-cta" href="#cta">Get early access</a>
+</nav>
+
+<!-- HERO -->
+<section style="background:var(--cream)">
+  <div class="hero">
+    <div>
+      <div class="hero-eyebrow">Built for Malaysia</div>
+      <h1>One inbox.<br>All your<br><em>accounts.</em></h1>
+      <p class="hero-sub">Stop juggling 5 email tabs. InboxMY unifies Gmail, Outlook and custom domains — and actually understands Malaysian emails: TNB bills, LHDN notices, Shopee receipts and more.</p>
+      <div class="hero-actions">
+        <a class="btn-primary" href="#cta">Start free — RM0/mo</a>
+        <a class="btn-ghost" href="inboxmy-dashboard.html">View dashboard →</a>
+      </div>
+      <div class="hero-proof">
+        <div class="proof-avatars">
+          <div class="proof-avatar" style="background:#e8402a">A</div>
+          <div class="proof-avatar" style="background:#0d7a6e">Z</div>
+          <div class="proof-avatar" style="background:#c97a1a">R</div>
+          <div class="proof-avatar" style="background:#5c48c9">M</div>
+          <div class="proof-avatar" style="background:#2a6abf">F</div>
+        </div>
+        <span>Join <strong>2,400+</strong> Malaysians on the waitlist</span>
+      </div>
+    </div>
+
+    <div class="hero-visual">
+      <div class="float-badge fb-top">
+        <div>
+          <div class="fb-label">TNB bill detected</div>
+          <div class="fb-sub">Due in 5 days · RM142.80</div>
+        </div>
+      </div>
+      <div class="mockup-card">
+        <div class="mc-bar">
+          <div class="mc-dot" style="background:#ff5f57"></div>
+          <div class="mc-dot" style="background:#ffbd2e"></div>
+          <div class="mc-dot" style="background:#28c840"></div>
+        </div>
+        <div class="mc-accounts">
+          <div class="mc-tab active"><div class="mc-tab-dot" style="background:#e8402a"></div>All inboxes</div>
+          <div class="mc-tab"><div class="mc-tab-dot" style="background:#4285f4"></div>Gmail</div>
+          <div class="mc-tab"><div class="mc-tab-dot" style="background:#0078d4"></div>Outlook</div>
+          <div class="mc-tab"><div class="mc-tab-dot" style="background:#9334e9"></div>Work</div>
+        </div>
+        <div class="mc-emails">
+          <div class="mc-email unread">
+            <div class="mc-avatar-sm" style="background:#d63031">T</div>
+            <div class="mc-email-body">
+              <div class="mc-from">Tenaga Nasional Berhad</div>
+              <div class="mc-subject">eBill untuk bulan Oktober 2025</div>
+              <div class="mc-preview">Amaun perlu dibayar: RM142.80 sebelum...</div>
+            </div>
+            <div class="mc-meta">
+              <div class="mc-time">9:41am</div>
+              <div class="mc-tag tag-bill">Bill</div>
+            </div>
+          </div>
+          <div class="mc-email unread">
+            <div class="mc-avatar-sm" style="background:#0d7a6e">L</div>
+            <div class="mc-email-body">
+              <div class="mc-from">LHDN — e-Filing</div>
+              <div class="mc-subject">Pengesahan Penerimaan Borang BE 2024</div>
+              <div class="mc-preview">Borang cukai pendapatan anda telah...</div>
+            </div>
+            <div class="mc-meta">
+              <div class="mc-time">Yesterday</div>
+              <div class="mc-tag tag-govt">Govt</div>
+            </div>
+          </div>
+          <div class="mc-email read">
+            <div class="mc-avatar-sm" style="background:#ee4d2d">S</div>
+            <div class="mc-email-body">
+              <div class="mc-from">Shopee Malaysia</div>
+              <div class="mc-subject">Order confirmed! Resit #2509163847</div>
+              <div class="mc-preview">Your order has been placed successfully...</div>
+            </div>
+            <div class="mc-meta">
+              <div class="mc-time">Mon</div>
+              <div class="mc-tag tag-shop">Receipt</div>
+            </div>
+          </div>
+          <div class="mc-email read">
+            <div class="mc-avatar-sm" style="background:#2a6abf">W</div>
+            <div class="mc-email-body">
+              <div class="mc-from">Wei Lin (Boss)</div>
+              <div class="mc-subject">Re: Q4 deck — need by Thursday</div>
+              <div class="mc-preview">Thanks, looks good. Can you add the...</div>
+            </div>
+            <div class="mc-meta">
+              <div class="mc-time">Mon</div>
+              <div class="mc-tag tag-work">Work</div>
+            </div>
+          </div>
+          <div class="mc-email read">
+            <div class="mc-avatar-sm" style="background:#00b4d8">U</div>
+            <div class="mc-email-body">
+              <div class="mc-from">Unifi by TM</div>
+              <div class="mc-subject">Your October invoice is ready</div>
+              <div class="mc-preview">Invoice No. INV-2025-10-38821 — RM129...</div>
+            </div>
+            <div class="mc-meta">
+              <div class="mc-time">Sun</div>
+              <div class="mc-tag tag-bill">Bill</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="float-badge fb-bottom">
+        <div class="fb-val">RM 7.90</div>
+        <div class="fb-sub">per month · save vs USD tools</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- LOGOS -->
+<div class="logos-section">
+  <div class="logos-inner">
+    <div class="logos-label">Understands emails from</div>
+    <div class="logos-row">
+      <div class="logo-item">TNB</div>
+      <div class="logo-item">Unifi · TM</div>
+      <div class="logo-item">LHDN</div>
+      <div class="logo-item">MyEG</div>
+      <div class="logo-item">Shopee</div>
+      <div class="logo-item">Lazada</div>
+      <div class="logo-item">TnG eWallet</div>
+      <div class="logo-item">Celcom · Digi</div>
+      <div class="logo-item">Maxis</div>
+      <div class="logo-item">JPJ</div>
+      <div class="logo-item">MySejahtera</div>
+    </div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section class="features" id="features">
+  <div class="section-label">Features</div>
+  <h2 class="section-title">Everything your email life<br>actually <em>needs</em></h2>
+  <p class="section-sub">Not a rebrand of an ang moh product. Built from scratch for how Malaysians actually use email.</p>
+
+  <div class="feat-grid">
+    <div class="feat-card">
+      <div class="feat-icon" style="background:#fdf0ed; font-size:22px">📬</div>
+      <div class="feat-name">Unified inbox</div>
+      <div class="feat-desc">All your Gmail, Outlook, Yahoo and custom domain accounts in a single clean view. Sorted by time, not by account.</div>
+      <div class="feat-tags">
+        <div class="feat-tag">Gmail</div>
+        <div class="feat-tag">Outlook</div>
+        <div class="feat-tag">Yahoo</div>
+        <div class="feat-tag">cPanel</div>
+        <div class="feat-tag">Zoho</div>
+      </div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon" style="background:#e8f5f3; font-size:22px">🏷️</div>
+      <div class="feat-name">Malaysian smart tags</div>
+      <div class="feat-desc">Auto-detects and tags TNB, Unifi, Celcom, TnG bills. Flags LHDN, JPJ and MyEG government emails. No setup required.</div>
+      <div class="feat-tags">
+        <div class="feat-tag">Bills</div>
+        <div class="feat-tag">Govt</div>
+        <div class="feat-tag">Receipts</div>
+        <div class="feat-tag">Auto</div>
+      </div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon" style="background:#f5f0ff; font-size:22px">🛍️</div>
+      <div class="feat-name">Receipt parser</div>
+      <div class="feat-desc">Shopee, Lazada and TikTok Shop order confirmations are parsed into a simple order history. Know what you spent without digging.</div>
+      <div class="feat-tags">
+        <div class="feat-tag">Shopee</div>
+        <div class="feat-tag">Lazada</div>
+        <div class="feat-tag">TikTok Shop</div>
+      </div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon" style="background:#fdf5e8; font-size:22px">⏰</div>
+      <div class="feat-name">Bill due reminders</div>
+      <div class="feat-desc">Automatically extract due dates from utility bills and send you a WhatsApp or push notification 3 days before they're due.</div>
+      <div class="feat-tags">
+        <div class="feat-tag">WhatsApp alerts</div>
+        <div class="feat-tag">Push notifications</div>
+      </div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon" style="background:#f0f5ff; font-size:22px">🌐</div>
+      <div class="feat-name">Bahasa Malaysia toggle</div>
+      <div class="feat-desc">Switch the entire UI to Bahasa Malaysia in one click. The first email client built with BM as a first-class language.</div>
+      <div class="feat-tags">
+        <div class="feat-tag">Bahasa Malaysia</div>
+        <div class="feat-tag">English</div>
+      </div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon" style="background:#e8f5f3; font-size:22px">🔒</div>
+      <div class="feat-name">Privacy first</div>
+      <div class="feat-desc">We never train AI on your emails. Connections use OAuth only — we never store your password. Data stays in Malaysian-region servers.</div>
+      <div class="feat-tags">
+        <div class="feat-tag">OAuth only</div>
+        <div class="feat-tag">No password stored</div>
+        <div class="feat-tag">MY servers</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MALAYSIA SECTION -->
+<section class="my-section" id="malaysia">
+  <div class="my-inner">
+    <div>
+      <div class="my-label">Built for MY</div>
+      <h2 class="my-title">Understands<br>Malaysian<br><em>life.</em></h2>
+      <p class="my-sub">Every app in the world tells you they support "international" email. None of them know what a LHDN e-Filing confirmation looks like, or that TNB bills come in BM. We do.</p>
+      <div class="my-pills">
+        <div class="my-pill">TNB eBill</div>
+        <div class="my-pill">Unifi Invoice</div>
+        <div class="my-pill">LHDN e-Filing</div>
+        <div class="my-pill">MyEG Renewal</div>
+        <div class="my-pill">Celcom Postpaid</div>
+        <div class="my-pill">Maxis Bill</div>
+        <div class="my-pill">Digi Invoice</div>
+        <div class="my-pill">JPJ Roadtax</div>
+        <div class="my-pill">Shopee Receipt</div>
+        <div class="my-pill">Lazada Order</div>
+        <div class="my-pill">TnG Reload</div>
+        <div class="my-pill">GrabPay</div>
+      </div>
+    </div>
+
+    <div class="detection-list">
+      <div class="det-item">
+        <div class="det-icon" style="background:rgba(232,64,42,.15)">⚡</div>
+        <div>
+          <div class="det-name">Utility bills (TNB, Unifi, Celcom)</div>
+          <div class="det-desc">Amount, due date and account number extracted automatically</div>
+        </div>
+        <div class="det-badge db-auto">Auto-detect</div>
+      </div>
+      <div class="det-item">
+        <div class="det-icon" style="background:rgba(13,122,110,.15)">🏛️</div>
+        <div>
+          <div class="det-name">Government emails (LHDN, MyEG, JPJ)</div>
+          <div class="det-desc">Flagged as high priority, never lost in spam</div>
+        </div>
+        <div class="det-badge db-auto">Auto-detect</div>
+      </div>
+      <div class="det-item">
+        <div class="det-icon" style="background:rgba(92,72,201,.15)">🛒</div>
+        <div>
+          <div class="det-name">E-commerce receipts (Shopee, Lazada)</div>
+          <div class="det-desc">Order number, total, ETA pulled into timeline view</div>
+        </div>
+        <div class="det-badge db-smart">Smart parse</div>
+      </div>
+      <div class="det-item">
+        <div class="det-icon" style="background:rgba(201,122,26,.15)">📱</div>
+        <div>
+          <div class="det-name">eWallet top-ups (TnG, GrabPay, Boost)</div>
+          <div class="det-desc">Reload confirmations tagged and grouped by month</div>
+        </div>
+        <div class="det-badge db-new">Coming soon</div>
+      </div>
+      <div class="det-item">
+        <div class="det-icon" style="background:rgba(42,106,191,.15)">🏦</div>
+        <div>
+          <div class="det-name">Bank notifications (Maybank, CIMB, RHB)</div>
+          <div class="det-desc">Transaction alerts separated from marketing email</div>
+        </div>
+        <div class="det-badge db-new">Coming soon</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing" id="pricing">
+  <div class="section-label">Pricing</div>
+  <h2 class="section-title">Priced for <em>Malaysia</em></h2>
+  <p class="section-sub">No USD pricing that costs RM140/month. No feature walls. Just honest RM pricing that makes sense.</p>
+
+  <div class="pricing-grid">
+    <div class="plan">
+      <div class="plan-name">Free</div>
+      <div class="plan-price"><sup>RM</sup>0<sub>/mo</sub></div>
+      <div class="plan-period">Forever free, no card needed</div>
+      <div class="plan-sep"></div>
+      <div class="plan-features">
+        <div class="pf"><span class="pf-check">✓</span>Up to 2 email accounts</div>
+        <div class="pf"><span class="pf-check">✓</span>Malaysian bill auto-tagging</div>
+        <div class="pf"><span class="pf-check">✓</span>Unified inbox view</div>
+        <div class="pf"><span class="pf-check">✓</span>7-day email history</div>
+      </div>
+      <a class="plan-btn" href="#cta">Get started free</a>
+    </div>
+
+    <div class="plan featured">
+      <div class="plan-badge">Most popular</div>
+      <div class="plan-name">Pro</div>
+      <div class="plan-price"><sup>RM</sup>7.90<sub>/mo</sub></div>
+      <div class="plan-period">Billed monthly · RM79/year</div>
+      <div class="plan-sep"></div>
+      <div class="plan-features">
+        <div class="pf"><span class="pf-check">✓</span>Up to 6 email accounts</div>
+        <div class="pf"><span class="pf-check">✓</span>All Malaysian smart tags</div>
+        <div class="pf"><span class="pf-check">✓</span>Shopee & Lazada receipt parser</div>
+        <div class="pf"><span class="pf-check">✓</span>Bill due date reminders</div>
+        <div class="pf"><span class="pf-check">✓</span>WhatsApp notifications</div>
+        <div class="pf"><span class="pf-check">✓</span>Bahasa Malaysia UI</div>
+        <div class="pf"><span class="pf-check">✓</span>Unlimited email history</div>
+      </div>
+      <a class="plan-btn" href="#cta">Start 14-day trial</a>
+    </div>
+
+    <div class="plan">
+      <div class="plan-name">Business</div>
+      <div class="plan-price"><sup>RM</sup>19<sub>/mo</sub></div>
+      <div class="plan-period">Per user · min 3 users</div>
+      <div class="plan-sep"></div>
+      <div class="plan-features">
+        <div class="pf"><span class="pf-check">✓</span>Everything in Pro</div>
+        <div class="pf"><span class="pf-check">✓</span>Unlimited email accounts</div>
+        <div class="pf"><span class="pf-check">✓</span>Shared team inbox</div>
+        <div class="pf"><span class="pf-check">✓</span>Custom domain email</div>
+        <div class="pf"><span class="pf-check">✓</span>SSO & admin controls</div>
+        <div class="pf"><span class="pf-check">✓</span>Priority support</div>
+      </div>
+      <a class="plan-btn" href="#cta">Contact sales</a>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section" id="cta">
+  <div class="section-label">Early access</div>
+  <h2 class="section-title">Join the waitlist.<br>Free for <em>early birds.</em></h2>
+  <p class="section-sub" style="margin:0 auto 36px">First 500 signups get Pro free for 6 months. No credit card. Just your email.</p>
+  <div class="cta-form">
+    <input class="cta-input" type="email" placeholder="yourname@gmail.com">
+    <a class="btn-primary" href="#">Join waitlist</a>
+  </div>
+  <p style="margin-top:14px;font-size:12px;color:var(--ink3)">Already 2,400+ on the list. We'll email you when your spot is ready.</p>
+</section>
+
+<footer>
+  <div class="footer-logo">InboxMY</div>
+  <div class="footer-links">
+    <a href="#">Privacy</a>
+    <a href="#">Terms</a>
+    <a href="#">Blog</a>
+    <a href="#">Contact</a>
+  </div>
+  <div class="footer-copy">© 2025 InboxMY · Made in Malaysia 🇲🇾</div>
+</footer>
+
+</body>
+</html>
