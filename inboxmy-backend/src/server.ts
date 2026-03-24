@@ -2,6 +2,7 @@
 import express from 'express'
 import cors from 'cors'
 import helmet from 'helmet'
+import rateLimit from 'express-rate-limit'
 import path from 'path'
 import { config } from './config'
 import { getDb } from './db'
@@ -18,6 +19,14 @@ export const app = express()
 app.use(helmet())
 app.use(cors({ origin: ['http://localhost:3000', 'http://localhost:5173'] }))
 app.use(express.json())
+
+// Rate limit API routes
+app.use('/api', rateLimit({
+  windowMs: 60_000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+}))
 
 // Serve frontend static files (InboxMy.html, landing.html from ../frontend/)
 app.use(express.static(path.resolve(__dirname, '../../frontend')))
