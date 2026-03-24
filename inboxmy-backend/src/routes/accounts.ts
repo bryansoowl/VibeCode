@@ -14,6 +14,16 @@ accountsRouter.get('/', (req, res) => {
   res.json({ accounts })
 })
 
+accountsRouter.get('/connect/gmail', async (req, res) => {
+  const url = getGmailUrl()
+  res.redirect(url)
+})
+
+accountsRouter.get('/connect/outlook', async (req, res) => {
+  const url = await getOutlookUrl()
+  res.redirect(url)
+})
+
 accountsRouter.delete('/:id', (req, res) => {
   const db = getDb()
   const result = db.prepare('DELETE FROM accounts WHERE id = ?').run(req.params.id)
@@ -27,14 +37,4 @@ accountsRouter.patch('/:id/label', (req, res) => {
   const db = getDb()
   db.prepare('UPDATE accounts SET label = ? WHERE id = ?').run(label, req.params.id)
   res.json({ ok: true })
-})
-
-accountsRouter.get('/connect/gmail', async (req, res) => {
-  const url = getGmailUrl()
-  res.redirect(url)
-})
-
-accountsRouter.get('/connect/outlook', async (req, res) => {
-  const url = await getOutlookUrl()
-  res.redirect(url)
 })

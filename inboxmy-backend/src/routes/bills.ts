@@ -46,6 +46,8 @@ billsRouter.patch('/:id/status', (req, res) => {
     return res.status(400).json({ error: 'Invalid status' })
   }
   const db = getDb()
+  const existing = db.prepare('SELECT id FROM parsed_bills WHERE id = ?').get(req.params.id)
+  if (!existing) return res.status(404).json({ error: 'Bill not found' })
   db.prepare('UPDATE parsed_bills SET status = ? WHERE id = ?').run(status, req.params.id)
   res.json({ ok: true })
 })
