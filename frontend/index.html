@@ -200,6 +200,8 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
     <input type="text" placeholder="Search emails, bills, receipts..." id="search-input" oninput="filterEmails(this.value)">
   </div>
   <div class="tb-right">
+    <button class="tb-lang" id="sync-btn" onclick="doSync()">↻ Sync</button>
+    <span id="sync-status" style="font-size:11px;color:var(--ink4)"></span>
     <button class="tb-lang active" id="lang-en" onclick="setLang('en')">EN</button>
     <button class="tb-lang" id="lang-bm" onclick="setLang('bm')">BM</button>
     <div class="tb-avatar" title="Amirul Hakim">A</div>
@@ -293,6 +295,7 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
       <div class="el-filter" onclick="setFilter('receipts', this)">Receipts</div>
     </div>
     <div class="el-items" id="el-items"></div>
+    <div id="scroll-sentinel" style="height:1px"></div>
   </div>
 
   <!-- EMAIL DETAIL -->
@@ -420,155 +423,7 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 <div id="toast"></div>
 
 <script>
-const EMAILS = [
-  {
-    id:'tnb', tag:'bill', unread:true, account:'gmail',
-    from:'Tenaga Nasional Berhad', email:'billing@tnb.com.my',
-    subject:'eBill untuk bulan Oktober 2025',
-    preview:'Amaun perlu dibayar: RM142.80 sebelum 30 Oktober',
-    time:'9:41am', timestamp:'Tue, 22 Oct 2025, 9:41am',
-    color:'#d63031',initial:'T',
-    smartType:'bill',
-    smart:{name:'TNB eBill', amount:'RM142.80', acct:'NO. AKAUN: 2108-4431-2', due:'30 Oktober 2025', period:'Sep 2025'},
-    body:`<p>Pelanggan Yang Dihormati,</p>
-<p>Sila ambil perhatian bahawa bil elektrik anda untuk bulan <strong>September 2025</strong> telah sedia untuk pembayaran.</p>
-<div class="bill-box">
-  <div class="bb-item"><div class="bb-key">No. Akaun</div><div class="bb-val">2108-4431-2</div></div>
-  <div class="bb-item"><div class="bb-key">Tempoh</div><div class="bb-val">Sep 2025</div></div>
-  <div class="bb-item"><div class="bb-key">Amaun Perlu Dibayar</div><div class="bb-val big">RM142.80</div></div>
-  <div class="bb-item"><div class="bb-key">Tarikh Akhir</div><div class="bb-val">30 Oktober 2025</div></div>
-</div>
-<p>Sila pastikan pembayaran dibuat sebelum tarikh akhir untuk mengelakkan penggantungan bekalan.</p>
-<p>Kaedah pembayaran yang diterima: <span class="highlight">JomPAY</span>, Maybank2u, CIMB Clicks, dan kaunter TNB.</p>
-<p>Terima kasih kerana menjadi pelanggan setia TNB.</p>`
-  },
-  {
-    id:'lhdn', tag:'govt', unread:true, account:'gmail',
-    from:'LHDN — e-Filing', email:'noreply@hasil.gov.my',
-    subject:'Pengesahan Penerimaan Borang BE 2024',
-    preview:'Borang cukai pendapatan anda telah berjaya diterima',
-    time:'Yesterday', timestamp:'Mon, 21 Oct 2025, 3:12pm',
-    color:'#0d7a6e',initial:'L',
-    smartType:'govt',
-    body:`<p>Tuan/Puan,</p>
-<p>Pihak LHDN dengan sukacitanya memaklumkan bahawa <strong>Borang BE 2024</strong> anda telah berjaya diterima oleh sistem e-Filing kami.</p>
-<div class="bill-box">
-  <div class="bb-item"><div class="bb-key">No. Rujukan</div><div class="bb-val">BE-2024-7734821</div></div>
-  <div class="bb-item"><div class="bb-key">Status</div><div class="bb-val" style="color:var(--teal)">Diterima</div></div>
-  <div class="bb-item"><div class="bb-key">Tarikh Hantar</div><div class="bb-val">21 Okt 2025</div></div>
-  <div class="bb-item"><div class="bb-key">Cukai Taksiran</div><div class="bb-val">RM0.00</div></div>
-</div>
-<p>Sila simpan e-mel ini sebagai rekod. Sebarang pertanyaan boleh dirujuk ke HASIL Care Line: <span class="highlight">1-800-88-5436</span>.</p>`
-  },
-  {
-    id:'shopee', tag:'shop', unread:true, account:'gmail',
-    from:'Shopee Malaysia', email:'no-reply@shopee.com.my',
-    subject:'Order confirmed! Resit #2509163847',
-    preview:'Mechanical Keyboard TKL — RM189.00',
-    time:'Mon', timestamp:'Mon, 21 Oct 2025, 10:08am',
-    color:'#ee4d2d',initial:'S',
-    smartType:'receipt',
-    smart:{platform:'Shopee', order:'#2509163847', item:'Mechanical Keyboard TKL Blue Switch', amount:'RM189.00', eta:'23–25 Oct 2025'},
-    body:`<p>Hi Amirul! Your order has been confirmed. 🎉</p>
-<div class="bill-box">
-  <div class="bb-item"><div class="bb-key">Order No.</div><div class="bb-val">#2509163847</div></div>
-  <div class="bb-item"><div class="bb-key">Platform</div><div class="bb-val">Shopee MY</div></div>
-  <div class="bb-item"><div class="bb-key">Item</div><div class="bb-val">Mechanical Keyboard TKL</div></div>
-  <div class="bb-item"><div class="bb-key">Total Paid</div><div class="bb-val big">RM189.00</div></div>
-</div>
-<p>Your order is currently being prepared by the seller. Estimated delivery: <span class="highlight">23–25 Oct 2025</span>.</p>
-<p>You can track your order directly in the Shopee app.</p>`
-  },
-  {
-    id:'weilin', tag:'work', unread:false, account:'work',
-    from:'Wei Lin (Boss)', email:'weilin@company.my',
-    subject:'Re: Q4 deck — need by Thursday',
-    preview:'Thanks, looks good. Can you add the KPI slide?',
-    time:'Mon', timestamp:'Mon, 21 Oct 2025, 8:55am',
-    color:'#2a6abf',initial:'W',
-    body:`<p>Thanks Amirul, the deck looks good overall.</p>
-<p>Can you add a KPI slide after slide 4 — just quarterly targets vs actuals for Q1-Q3. Grab the numbers from the shared Google Sheet.</p>
-<p>Also the font on the cover page looks off on projectors, maybe bump it to 36pt?</p>
-<p>Need it by <span class="highlight">Thursday 5pm</span> latest — board meeting is Friday morning.</p>
-<p>Thanks,<br>Wei Lin</p>`
-  },
-  {
-    id:'unifi', tag:'bill', unread:false, account:'outlook',
-    from:'Unifi by TM', email:'billing@unifi.com.my',
-    subject:'Your October invoice is ready',
-    preview:'Invoice INV-2025-10-38821 — RM129.00',
-    time:'Sun', timestamp:'Sun, 20 Oct 2025, 6:00am',
-    color:'#00b4d8',initial:'U',
-    smartType:'bill',
-    smart:{name:'Unifi Invoice', amount:'RM129.00', acct:'INV-2025-10-38821', due:'1 November 2025', period:'Oct 2025'},
-    body:`<p>Dear Amirul Hakim,</p>
-<p>Your Unifi invoice for <strong>October 2025</strong> is now available.</p>
-<div class="bill-box">
-  <div class="bb-item"><div class="bb-key">Invoice No.</div><div class="bb-val">INV-2025-10-38821</div></div>
-  <div class="bb-item"><div class="bb-key">Plan</div><div class="bb-val">Unifi 300Mbps</div></div>
-  <div class="bb-item"><div class="bb-key">Amount Due</div><div class="bb-val big">RM129.00</div></div>
-  <div class="bb-item"><div class="bb-key">Due Date</div><div class="bb-val">1 November 2025</div></div>
-</div>
-<p>Pay via <span class="highlight">JomPAY (Biller Code 88050)</span>, Maybank2u, or MyUnifi app.</p>`
-  },
-  {
-    id:'lazada', tag:'shop', unread:false, account:'gmail',
-    from:'Lazada Malaysia', email:'noreply@lazada.com.my',
-    subject:'Your order is confirmed — USB-C Hub 7-in-1',
-    preview:'Order #LZ-MY-29183-2025 · RM58.90',
-    time:'Sun', timestamp:'Sun, 20 Oct 2025, 11:22am',
-    color:'#f46e07',initial:'L',
-    smartType:'receipt',
-    smart:{platform:'Lazada', order:'#LZ-MY-29183-2025', item:'USB-C Hub 7-in-1', amount:'RM58.90', eta:'22–24 Oct 2025'},
-    body:`<p>Hello Amirul,</p>
-<p>Thank you for your order on Lazada!</p>
-<div class="bill-box">
-  <div class="bb-item"><div class="bb-key">Order No.</div><div class="bb-val">#LZ-MY-29183-2025</div></div>
-  <div class="bb-item"><div class="bb-key">Item</div><div class="bb-val">USB-C Hub 7-in-1 (Silver)</div></div>
-  <div class="bb-item"><div class="bb-key">Payment</div><div class="bb-val">TnG eWallet</div></div>
-  <div class="bb-item"><div class="bb-key">Total Paid</div><div class="bb-val big">RM58.90</div></div>
-</div>
-<p>Estimated delivery: <span class="highlight">22–24 October 2025</span>.</p>`
-  },
-  {
-    id:'myeg', tag:'govt', unread:false, account:'outlook',
-    from:'MyEG Services', email:'noreply@myeg.com.my',
-    subject:'Pembaharuan Lesen Memandu — Berjaya',
-    preview:'Lesen memandu anda telah diperbaharui sehingga 2030',
-    time:'Sat', timestamp:'Sat, 19 Oct 2025, 2:41pm',
-    color:'#0d7a6e',initial:'M',
-    body:`<p>Tuan Amirul Hakim,</p>
-<p>Permohonan pembaharuan lesen memandu anda melalui MyEG telah berjaya diproses.</p>
-<div class="bill-box">
-  <div class="bb-item"><div class="bb-key">No. Rujukan</div><div class="bb-val">MEG-2025-0931827</div></div>
-  <div class="bb-item"><div class="bb-key">Jenis Lesen</div><div class="bb-val">D (5 tahun)</div></div>
-  <div class="bb-item"><div class="bb-key">Sah Sehingga</div><div class="bb-val" style="color:var(--teal)">Oktober 2030</div></div>
-  <div class="bb-item"><div class="bb-key">Yuran Dibayar</div><div class="bb-val big">RM85.00</div></div>
-</div>
-<p>Lesen fizikal anda akan dihantar ke alamat berdaftar dalam masa <span class="highlight">7–14 hari bekerja</span>.</p>`
-  },
-  {
-    id:'celcom', tag:'bill', unread:false, account:'gmail',
-    from:'Celcom Axiata', email:'billing@celcom.com.my',
-    subject:'Bil Postpaid Oktober 2025 — RM58.00',
-    preview:'Tarikh akhir pembayaran: 10 November 2025',
-    time:'Fri', timestamp:'Fri, 18 Oct 2025, 8:00am',
-    color:'#6c2bd9',initial:'C',
-    smartType:'bill',
-    smart:{name:'Celcom Postpaid', amount:'RM58.00', acct:'016-382 XXXX', due:'10 November 2025', period:'Oct 2025'},
-    body:`<p>Pelanggan yang dihormati,</p>
-<p>Bil Postpaid Celcom anda untuk bulan Oktober 2025 telah dikeluarkan.</p>
-<div class="bill-box">
-  <div class="bb-item"><div class="bb-key">No. Telefon</div><div class="bb-val">016-382 XXXX</div></div>
-  <div class="bb-item"><div class="bb-key">Plan</div><div class="bb-val">Celcom FIRST Platinum</div></div>
-  <div class="bb-item"><div class="bb-key">Jumlah Bil</div><div class="bb-val big">RM58.00</div></div>
-  <div class="bb-item"><div class="bb-key">Tarikh Akhir</div><div class="bb-val">10 November 2025</div></div>
-</div>
-<p>Bayar melalui <span class="highlight">JomPAY (Kod Biller: 17059)</span>, atau melalui apl MyCelcom.</p>`
-  },
-];
-
-// ── LANG ──────────────────────────────
+// ── LANG ──────────────────────────────────────────────────────────────────
 const LABELS = {
   en: { inbox:'All inbox', bills:'Bills', govt:'Government', receipts:'Receipts', work:'Work', sent:'Sent', spam:'Spam', accounts:'Accounts', 'all-accounts':'All accounts', 'compose-btn':'+ Compose', 'bills-due':'Bills due soon', 'bills-total':'Bills total', shopping:'Shopping', 'new-message':'New message', to:'To', 'subject-compose':'Subject', send:'Send', },
   bm: { inbox:'Semua peti masuk', bills:'Bil', govt:'Kerajaan', receipts:'Resit', work:'Kerja', sent:'Dihantar', spam:'Spam', accounts:'Akaun', 'all-accounts':'Semua akaun', 'compose-btn':'+ Karang', 'bills-due':'Bil perlu dibayar', 'bills-total':'Jumlah bil', shopping:'Membeli-belah', 'new-message':'Mesej baru', to:'Kepada', 'subject-compose':'Tajuk', send:'Hantar', },
@@ -590,141 +445,7 @@ function setLang(l) {
   document.getElementById('lbl-subject-compose').textContent = lb['subject-compose'];
 }
 
-// ── STATE ─────────────────────────────
-let currentFolder = 'inbox';
-let currentFilter = 'all';
-let currentSearch = '';
-let selectedId = null;
-
-function getVisibleEmails() {
-  let list = EMAILS;
-  if (currentFolder === 'bills') list = list.filter(e => e.tag === 'bill');
-  else if (currentFolder === 'govt') list = list.filter(e => e.tag === 'govt');
-  else if (currentFolder === 'receipts') list = list.filter(e => e.tag === 'shop');
-  else if (currentFolder === 'work') list = list.filter(e => e.tag === 'work');
-  if (currentFilter === 'unread') list = list.filter(e => e.unread);
-  else if (currentFilter === 'bills') list = list.filter(e => e.tag === 'bill');
-  else if (currentFilter === 'govt') list = list.filter(e => e.tag === 'govt');
-  else if (currentFilter === 'receipts') list = list.filter(e => e.tag === 'shop');
-  if (currentSearch) {
-    const q = currentSearch.toLowerCase();
-    list = list.filter(e => e.from.toLowerCase().includes(q) || e.subject.toLowerCase().includes(q) || e.preview.toLowerCase().includes(q));
-  }
-  return list;
-}
-
-function renderList() {
-  const visible = getVisibleEmails();
-  const wrap = document.getElementById('el-items');
-  wrap.innerHTML = '';
-  document.getElementById('email-count').textContent = visible.length + ' emails';
-  if (!visible.length) {
-    wrap.innerHTML = '<div style="padding:32px;text-align:center;color:var(--ink4);font-size:13px">No emails found</div>';
-    return;
-  }
-  visible.forEach(e => {
-    const row = document.createElement('div');
-    row.className = 'email-row ' + (e.unread ? 'unread' : 'read') + (selectedId === e.id ? ' selected' : '');
-    row.id = 'row-' + e.id;
-    const tagHtml = {
-      bill:`<div class="er-tag tag-bill">Bill</div>`,
-      govt:`<div class="er-tag tag-govt">Govt</div>`,
-      shop:`<div class="er-tag tag-shop">Receipt</div>`,
-      work:`<div class="er-tag tag-work">Work</div>`,
-    }[e.tag] || '';
-    row.innerHTML = `
-      <div class="er-avatar" style="background:${e.color}">${e.initial}</div>
-      <div class="er-body">
-        <div class="er-from">${e.from}</div>
-        <div class="er-subject">${e.subject}</div>
-        <div class="er-preview">${e.preview}</div>
-      </div>
-      <div class="er-meta">
-        <div class="er-time">${e.time}</div>
-        ${tagHtml}
-        ${e.unread ? '<div class="er-unread-dot"></div>' : ''}
-      </div>`;
-    row.onclick = () => selectEmail(e.id);
-    wrap.appendChild(row);
-  });
-}
-
-function selectEmail(id) {
-  selectedId = id;
-  const e = EMAILS.find(x => x.id === id);
-  if (!e) return;
-  e.unread = false;
-
-  document.querySelectorAll('.email-row').forEach(r => r.classList.remove('selected'));
-  const row = document.getElementById('row-' + id);
-  if (row) { row.classList.add('selected'); row.classList.remove('unread'); row.querySelector('.er-from').style.fontWeight = '500'; }
-  if (row) { const dot = row.querySelector('.er-unread-dot'); if(dot) dot.remove(); }
-
-  document.getElementById('ed-empty').style.display = 'none';
-  const content = document.getElementById('ed-content');
-  content.style.display = 'flex';
-
-  document.getElementById('ed-subject').textContent = e.subject;
-  const av = document.getElementById('ed-avatar');
-  av.textContent = e.initial; av.style.background = e.color;
-  document.getElementById('ed-from-name').textContent = e.from;
-  document.getElementById('ed-from-email').textContent = `<${e.email}>`;
-  document.getElementById('ed-timestamp').textContent = e.timestamp;
-
-  const tagMap = { bill:`<div class="ed-tag tag-bill">Bill</div>`, govt:`<div class="ed-tag tag-govt">Government</div>`, shop:`<div class="ed-tag tag-shop">Receipt</div>`, work:`<div class="ed-tag tag-work">Work</div>` };
-  document.getElementById('ed-tags').innerHTML = tagMap[e.tag] || '';
-  document.getElementById('ed-body-content').innerHTML = e.body;
-
-  // Smart card
-  const sc = document.getElementById('ed-smart-card');
-  if (e.smart && e.smartType === 'bill') {
-    sc.innerHTML = `<div class="smart-card">
-      <div class="sc-header"><div class="sc-icon">⚡</div><div><div class="sc-label">${e.smart.name} — extracted automatically by InboxMY</div><div class="sc-sublabel">Tap to add payment reminder</div></div></div>
-      <div class="sc-body">
-        <div class="sc-stat"><span class="sc-val coral">${e.smart.amount}</span><div class="sc-key">Amount due</div></div>
-        <div class="sc-stat"><span class="sc-val">${e.smart.due}</span><div class="sc-key">Due date</div></div>
-        <div class="sc-stat"><span class="sc-val">${e.smart.period}</span><div class="sc-key">Period</div></div>
-      </div></div>`;
-  } else if (e.smart && e.smartType === 'receipt') {
-    sc.innerHTML = `<div class="smart-card">
-      <div class="sc-header"><div class="sc-icon">🛍️</div><div><div class="sc-label">${e.smart.platform} order — parsed by InboxMY</div><div class="sc-sublabel">${e.smart.order}</div></div></div>
-      <div class="sc-body">
-        <div class="sc-stat"><span class="sc-val amber">${e.smart.amount}</span><div class="sc-key">Total paid</div></div>
-        <div class="sc-stat"><span class="sc-val teal">${e.smart.eta}</span><div class="sc-key">Est. delivery</div></div>
-      </div></div>`;
-  } else { sc.innerHTML = ''; }
-}
-
-function selectEmailById(id) { selectEmail(id); }
-
-function setFolder(f, el) {
-  currentFolder = f;
-  currentFilter = 'all';
-  document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('active'));
-  if (el) el.classList.add('active');
-  const titles = { inbox:'All inbox', bills:'Bills', govt:'Government', receipts:'Receipts', work:'Work', sent:'Sent', spam:'Spam' };
-  document.getElementById('folder-title').textContent = titles[f] || f;
-  document.querySelectorAll('.el-filter').forEach(i => i.classList.remove('active'));
-  document.getElementById('filter-all').classList.add('active');
-  renderList();
-}
-
-function setAccount(a, el) {
-  document.querySelectorAll('.sb-account').forEach(i => i.classList.remove('active'));
-  if (el) el.classList.add('active');
-  renderList();
-}
-
-function setFilter(f, el) {
-  currentFilter = f;
-  document.querySelectorAll('.el-filter').forEach(i => i.classList.remove('active'));
-  if (el) el.classList.add('active');
-  renderList();
-}
-
-function filterEmails(q) { currentSearch = q; renderList(); }
-
-// ── COMPOSE ───────────────────────────
+// ── COMPOSE ───────────────────────────────────────────────────────────────
 function openCompose() { document.getElementById('compose').classList.add('show'); }
 function closeCompose() { document.getElementById('compose').classList.remove('show'); }
 function sendEmail() {
@@ -746,10 +467,7 @@ function showToast(msg) {
   if (toastTmr) clearTimeout(toastTmr);
   toastTmr = setTimeout(() => t.classList.remove('show'), 3000);
 }
-
-// ── INIT ──────────────────────────────
-renderList();
-setTimeout(() => selectEmail('tnb'), 100);
 </script>
+<script src="app.js"></script>
 </body>
 </html>
