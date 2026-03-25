@@ -565,3 +565,32 @@ function renderBillsPanel(bills, orders = []) {
   document.getElementById('bills-total-amt').textContent = 'RM' + total.toFixed(2);
   document.getElementById('bills-overdue-count').textContent = String(overdueCount);
 }
+
+// ── SYNC ──────────────────────────────────────────────────────────────────────
+async function doSync() {
+  const btn = document.getElementById('sync-btn');
+  const status = document.getElementById('sync-status');
+  if (!btn) return;
+
+  btn.textContent = '↻ Syncing…';
+  btn.disabled = true;
+  if (status) status.textContent = '';
+
+  try {
+    await triggerSync();
+    showToast('Sync complete!');
+    // Reload all data panels
+    await Promise.all([loadEmails(true), loadAccounts(), loadBills()]);
+    if (status) {
+      status.textContent = 'Last sync: ' + new Date().toLocaleTimeString('en-MY', {
+        hour: '2-digit', minute: '2-digit', hour12: true
+      });
+    }
+  } catch (err) {
+    showToast('Sync failed: ' + (err.message || 'Unknown error'));
+    if (status) status.textContent = 'Sync failed';
+  } finally {
+    btn.textContent = '↻ Sync';
+    btn.disabled = false;
+  }
+}
