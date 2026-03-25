@@ -12,6 +12,9 @@ export const config = {
   port: parseInt(process.env.PORT ?? '3001'),
   dataDir: process.env.DATA_DIR ?? './data',
   encryptionKey: required('ENCRYPTION_KEY'),
+  sessionSecret: required('SESSION_SECRET'),
+  recoverySecret: required('RECOVERY_SECRET'),
+  appUrl: process.env.APP_URL ?? 'http://localhost:3001',
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID ?? '',
     clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
@@ -21,6 +24,12 @@ export const config = {
     clientId: process.env.MICROSOFT_CLIENT_ID ?? '',
     clientSecret: process.env.MICROSOFT_CLIENT_SECRET ?? '',
     redirectUri: process.env.MICROSOFT_REDIRECT_URI ?? 'http://localhost:3001/auth/outlook/callback',
+  },
+  smtp: {
+    host: process.env.SMTP_HOST ?? '',
+    port: parseInt(process.env.SMTP_PORT ?? '587'),
+    user: process.env.SMTP_USER ?? '',
+    pass: process.env.SMTP_PASS ?? '',
   },
   syncIntervalMinutes: parseInt(process.env.SYNC_INTERVAL_MINUTES ?? '15'),
 }
@@ -38,6 +47,10 @@ export function validateConfig(): void {
   const msOk = !!(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET)
   console.log(`  ${msOk ? '[✓]' : '[ ]'} Outlook (MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET)`)
   if (!msOk) console.log('      → Run: npm run setup')
+
+  const smtpOk = !!(process.env.SMTP_HOST)
+  console.log(`  ${smtpOk ? '[✓]' : '[ ]'} SMTP (password reset emails)`)
+  if (!smtpOk) console.log('      → Reset links will be logged to console')
 
   console.log(bar)
 }
