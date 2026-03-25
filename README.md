@@ -61,31 +61,18 @@ cd C:\Users\bryan.GOAT\Downloads\VibeCode\inboxmy-backend
 npm install
 ```
 
-**Create your `.env` file:**
+**Create your `.env` file by running the setup wizard:**
 
 ```powershell
-# Copy the example env file
-copy .env.example .env
+npm run setup
 ```
 
-Open `.env` in any text editor (Notepad, VS Code, etc.) and fill in the values:
+The wizard will:
+- Auto-generate a secure `ENCRYPTION_KEY` for you
+- Walk you through Google Cloud setup (for Gmail) and/or Azure Portal setup (for Outlook)
+- Write a complete `.env` file — you never need to edit it manually
 
-```env
-# Generate a random encryption key — run this in PowerShell:
-# -join ((1..32) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) })
-# Or in Node: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-ENCRYPTION_KEY=paste_your_64_character_hex_key_here
-
-# From Google Cloud Console — leave blank for now if you haven't set this up yet
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-
-# From Azure Portal — leave blank for now if you haven't set this up yet
-MICROSOFT_CLIENT_ID=
-MICROSOFT_CLIENT_SECRET=
-```
-
-> **Important:** `ENCRYPTION_KEY` must be exactly 64 hex characters (= 32 bytes). All your email data is encrypted with this key. Store it safely — if you lose it, you cannot decrypt the database.
+> For the full step-by-step credential guide (every click in Google Cloud Console and Azure Portal), see [SETUP.md](./SETUP.md).
 
 ---
 
@@ -262,20 +249,9 @@ npm run test:watch
 
 ---
 
-## Google Cloud Setup (for Gmail OAuth)
+## Credentials Setup
 
-If you get `Error 403: org_internal` when connecting Gmail, your OAuth app is set to Internal. Fix it:
-
-1. Go to [console.cloud.google.com](https://console.cloud.google.com)
-2. Select your project
-3. Go to **APIs & Services → OAuth consent screen**
-4. Under User Type, click **"MAKE EXTERNAL"**
-5. Fill in App name, support email, and developer contact email — save
-6. Go to **Test users → + ADD USERS**
-7. Add the Gmail address you want to test with
-8. Save
-
-Your app is now in "Testing" mode. Only the email addresses you added as test users can authorise it. This is sufficient for local personal use — you do not need to go through Google's full verification process.
+For the full step-by-step guide to setting up Google Cloud (Gmail) and Azure Portal (Outlook) credentials, see [SETUP.md](./SETUP.md).
 
 ---
 
@@ -348,18 +324,28 @@ npm start
 
 ---
 
+## Vision
+
+InboxMY is heading toward a **BlueMail-style model**: you (the person running the server) register the OAuth app with Google and Microsoft once. Your users connect their own email accounts by clicking "Connect Gmail" or "Connect Outlook" — they go through Google/Microsoft's standard permission screen and are done. No terminal, no credentials, no setup knowledge required.
+
+The current version is a single-user local app. **Plan 4** adds multi-user architecture: user sign-up/sign-in, per-user data isolation, and per-user encryption keys — the foundation for both a hosted service and a local-download app.
+
+---
+
 ## Roadmap
 
-| Plan | Focus | Status |
-|---|---|---|
-| Plan 1 | Backend — crypto, DB, auth, parsers, sync engine, REST API | **Done** |
-| Plan 2 | Frontend wiring — dashboard connected to live API | **Done** |
-| Plan 3 | OAuth credentials setup guide | Pending |
-| Plan 4 | Account management UI (rename, delete, re-auth) | Pending |
-| Plan 5 | Notifications + overdue detection | Pending |
-| Plan 6 | Search + filtering improvements | Pending |
-| Plan 7 | Packaging + auto-start on login | Pending |
-| Plan 8 | Hardening + v1.0 polish | Pending |
+| # | Plan | Key Deliverables | Status |
+|---|------|-----------------|--------|
+| 1 | **Backend Core** | Encrypted SQLite, OAuth flows (Gmail + Outlook), email sync engine, Malaysian bill parsers (TNB, Unifi, Maxis, TnG, LHDN, Shopee, Lazada), REST API, 32 tests | ✅ Done |
+| 2 | **Frontend Wiring** | Dashboard panels wired to live API — email list, email detail, accounts sidebar, bills panel, sync button, infinite scroll, error handling | ✅ Done |
+| 3 | **OAuth Credentials Setup** | `npm run setup` wizard, startup config validator with checklist, `SETUP.md` full reference guide, README roadmap remodel | ✅ Done |
+| 4 | **Multi-User Architecture** | User sign-up/sign-in, per-user data isolation, per-user encryption keys, session management — foundation for hosted and local-download modes | ⏳ Pending |
+| 5 | **Account Management UI** | Rename accounts, delete + revoke, re-auth expired tokens, per-account sync status | ⏳ Pending |
+| 6 | **Notifications + Overdue Detection** | Due-date alerts, overdue bill banner, browser notifications | ⏳ Pending |
+| 7 | **Search + Filtering Improvements** | Full-text search, date range filters, multi-account filter, saved searches | ⏳ Pending |
+| 8 | **Packaging + Auto-start on Login** | Electron or system tray wrapper, auto-start on OS login, local-download installer | ⏳ Pending |
+| 9 | **Hardening + v1.0 Polish** | Rate limiting review, error boundary UI, accessibility pass, performance profiling, v1.0 release | ⏳ Pending |
+| 10 | **Hosted Deployment** | Docker setup, cloud hosting config, privacy-preserving multi-tenant model | ⏳ Pending |
 
 ---
 
@@ -376,8 +362,11 @@ SQLite database. Nothing is sent to any cloud.
 Completed so far:
 - Plan 1 (Backend): 100% complete, 32 tests passing, running at http://localhost:3001
 - Plan 2 (Frontend Wiring): 100% complete — frontend/app.js wires all dashboard panels to the live API
+- Plan 3 (OAuth Credentials Setup): 100% complete — npm run setup wizard, startup config checklist,
+  SETUP.md guide, README roadmap remodel
 
-Today's goal is Plan 3: OAuth Credentials Setup Guide.
-Write a step-by-step guide for users to obtain Google Cloud and Azure credentials,
-validate the .env file on startup, and print a friendly checklist if .env is missing.
+Today's goal is Plan 4: Multi-User Architecture.
+Add user sign-up/sign-in, per-user data isolation, per-user encryption keys, and session management —
+the foundation for both hosted and local-download modes. See docs/superpowers/specs/ for the design spec
+once it is written.
 ```
