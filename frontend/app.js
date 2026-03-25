@@ -262,3 +262,138 @@ function setupInfiniteScroll() {
 function showApiError(err) {
   showToast('Error: ' + (err && err.message ? err.message : 'Unknown error'));
 }
+
+// ── TASK 3: EMAIL DETAIL + MARK READ ─────────────────────────────────────────
+
+async function selectEmail(id) {
+  selectedEmailId = id;
+
+  // Highlight row immediately (optimistic)
+  document.querySelectorAll('.email-row').forEach(r => r.classList.remove('selected'));
+  const row = document.getElementById('row-' + id);
+  if (row) row.classList.add('selected');
+
+  document.getElementById('ed-empty').style.display = 'none';
+  const content = document.getElementById('ed-content');
+  content.style.display = 'flex';
+
+  // Show loading state
+  document.getElementById('ed-subject').textContent = 'Loading…';
+  document.getElementById('ed-body-content').innerHTML = '<div style="color:var(--ink4);padding:8px">Loading email…</div>';
+  document.getElementById('ed-smart-card').innerHTML = '';
+
+  try {
+    const email = await fetchEmail(id);
+    renderEmailDetail(email);
+
+    // Mark read (fire & forget — don't block UI)
+    if (!email.is_read) {
+      markRead(id).catch(() => {});
+      // Update row UI
+      if (row) {
+        row.classList.remove('unread');
+        const dot = row.querySelector('.er-unread-dot');
+        if (dot) dot.remove();
+        const fromEl = row.querySelector('.er-from');
+        if (fromEl) fromEl.style.fontWeight = '500';
+      }
+      // Update cache
+      const cached = emailCache.find(e => e.id === id);
+      if (cached) cached.is_read = true;
+    }
+  } catch (err) {
+    document.getElementById('ed-subject').textContent = 'Failed to load email';
+    document.getElementById('ed-body-content').innerHTML =
+      `<div style="color:var(--coral);padding:8px">Error: ${escHtml(err.message)}</div>`;
+    if (err.status === 401) showReconnectPrompt();
+  }
+}
+
+function selectEmailById(id) { selectEmail(id); }
+
+function renderEmailDetail(email) {
+  const name = email.sender_name || email.sender || '?';
+  const initial = name.charAt(0).toUpperCase();
+  const avatarColors = { bill: '#c97a1a', govt: '#0d7a6e', receipt: '#5c48c9', work: '#2a6abf' };
+  const color = avatarColors[email.category] || '#a89e94';
+
+  document.getElementById('ed-subject').textContent = email.subject || '(no subject)';
+
+  const av = document.getElementById('ed-avatar');
+  av.textContent = initial;
+  av.style.background = color;
+
+  document.getElementById('ed-from-name').textContent = name;
+  document.getElementById('ed-from-email').textContent = email.sender ? `<${email.sender}>` : '';
+  document.getElementById('ed-timestamp').textContent = email.received_at
+    ? new Date(email.received_at).toLocaleString('en-MY', {
+        weekday:'short', day:'numeric', month:'short', year:'numeric',
+        hour:'2-digit', minute:'2-digit', hour12:true
+      })
+    : '';
+
+  const tagMap = {
+    bill:    '<div class="ed-tag tag-bill">Bill</div>',
+    govt:    '<div class="ed-tag tag-govt">Government</div>',
+    receipt: '<div class="ed-tag tag-shop">Receipt</div>',
+    work:    '<div class="ed-tag tag-work">Work</div>',
+  };
+  document.getElementById('ed-tags').innerHTML = tagMap[email.category] || '';
+
+  // Body: render as HTML (came from trusted local encrypted DB)
+  const bodyEl = document.getElementById('ed-body-content');
+  if (email.body) {
+    bodyEl.innerHTML = email.body;
+  } else if (email.snippet) {
+    bodyEl.innerHTML = `<p>${escHtml(email.snippet)}</p>`;
+  } else {
+    bodyEl.innerHTML = '<p style="color:var(--ink4)">No body content.</p>';
+  }
+
+  renderSmartCard(email);
+}
+
+function renderSmartCard(email) {
+  const sc = document.getElementById('ed-smart-card');
+  if (email.category === 'bill' && email.biller) {
+    const amt = email.amount_rm != null ? 'RM' + Number(email.amount_rm).toFixed(2) : '—';
+    const due = email.due_date
+      ? new Date(email.due_date).toLocaleDateString('en-MY', { day:'numeric', month:'long', year:'numeric' })
+      : '—';
+    const acct = email.account_ref || '—';
+    sc.innerHTML = `<div class="smart-card">
+      <div class="sc-header">
+        <div class="sc-icon">⚡</div>
+        <div>
+          <div class="sc-label">${escHtml(email.biller)} — extracted by InboxMY</div>
+          <div class="sc-sublabel">Account: ${escHtml(acct)}</div>
+        </div>
+      </div>
+      <div class="sc-body">
+        <div class="sc-stat"><span class="sc-val coral">${escHtml(amt)}</span><div class="sc-key">Amount due</div></div>
+        <div class="sc-stat"><span class="sc-val">${escHtml(due)}</span><div class="sc-key">Due date</div></div>
+      </div>
+    </div>`;
+  } else if (email.category === 'receipt' && email.biller) {
+    const amt = email.amount_rm != null ? 'RM' + Number(email.amount_rm).toFixed(2) : '—';
+    sc.innerHTML = `<div class="smart-card">
+      <div class="sc-header">
+        <div class="sc-icon">🛍️</div>
+        <div>
+          <div class="sc-label">${escHtml(email.biller)} order — parsed by InboxMY</div>
+          <div class="sc-sublabel">${escHtml(email.account_ref || '')}</div>
+        </div>
+      </div>
+      <div class="sc-body">
+        <div class="sc-stat"><span class="sc-val amber">${escHtml(amt)}</span><div class="sc-key">Total paid</div></div>
+      </div>
+    </div>`;
+  } else {
+    sc.innerHTML = '';
+  }
+}
+
+// Stub — fully implemented in Task 7
+function showReconnectPrompt() {
+  showToast('Authentication expired. Please reconnect your account.');
+}
