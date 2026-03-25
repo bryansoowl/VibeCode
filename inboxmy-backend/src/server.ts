@@ -3,7 +3,7 @@ import express from 'express'
 import cors from 'cors'
 import rateLimit from 'express-rate-limit'
 import path from 'path'
-import { config } from './config'
+import { config, validateConfig } from './config'
 import { getDb } from './db'
 import { accountsRouter } from './routes/accounts'
 import { emailsRouter } from './routes/emails'
@@ -61,6 +61,7 @@ app.use('/api/sync', syncRouter)
 app.get('/health', (req, res) => res.json({ ok: true, ts: Date.now() }))
 
 if (require.main === module) {
+  validateConfig()           // ← add as first statement
   getDb() // initialise DB on start
   startScheduler()
   const port = config.port
