@@ -216,8 +216,8 @@ Expected output:
 ```
  RUN  v4.x.x
 
- Test Files  7 passed (7)
-       Tests  32 passed (32)
+ Test Files  9 passed (9)
+       Tests  51 passed (51)
     Duration  ~2s
 ```
 
@@ -232,6 +232,8 @@ Expected output:
 | `tests/parsers/generic-bill.test.ts` | Generic Malaysian RM amount and date parsing |
 | `tests/parsers/remaining.test.ts` | Unifi, Celcom/Maxis, Touch 'n Go, Lazada parser coverage |
 | `tests/routes/accounts.test.ts` | GET /api/accounts, PATCH label, DELETE account |
+| `tests/config.test.ts` | validateConfig() checklist output — Gmail/Outlook [✓]/[ ] states |
+| `tests/setup.test.ts` | isValidGoogleClientId, isValidAzureClientId, isValidSecret, buildEnvContent |
 
 To run a single test file:
 ```powershell
@@ -336,7 +338,7 @@ The current version is a single-user local app. **Plan 4** adds multi-user archi
 
 | # | Plan | Key Deliverables | Status |
 |---|------|-----------------|--------|
-| 1 | **Backend Core** | Encrypted SQLite, OAuth flows (Gmail + Outlook), email sync engine, Malaysian bill parsers (TNB, Unifi, Maxis, TnG, LHDN, Shopee, Lazada), REST API, 32 tests | ✅ Done |
+| 1 | **Backend Core** | Encrypted SQLite, OAuth flows (Gmail + Outlook), email sync engine, Malaysian bill parsers (TNB, Unifi, Maxis, TnG, LHDN, Shopee, Lazada), REST API | ✅ Done |
 | 2 | **Frontend Wiring** | Dashboard panels wired to live API — email list, email detail, accounts sidebar, bills panel, sync button, infinite scroll, error handling | ✅ Done |
 | 3 | **OAuth Credentials Setup** | `npm run setup` wizard, startup config validator with checklist, `SETUP.md` full reference guide, README roadmap remodel | ✅ Done |
 | 4 | **Multi-User Architecture** | User sign-up/sign-in, per-user data isolation, per-user encryption keys, session management — foundation for hosted and local-download modes | ⏳ Pending |
