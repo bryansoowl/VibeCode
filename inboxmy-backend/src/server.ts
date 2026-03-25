@@ -12,11 +12,15 @@ import { syncRouter } from './routes/sync'
 import { handleCallback as gmailCallback } from './auth/gmail'
 import { handleCallback as outlookCallback } from './auth/outlook'
 import { startScheduler } from './scheduler'
+import cookieParser from 'cookie-parser'
+import { authRouter } from './routes/auth'
+import { requireAuth, SESSION_TTL_MS } from './middleware/auth'
 
 export const app = express()
 
 app.use(cors({ origin: ['http://localhost:3000', 'http://localhost:5173'] }))
 app.use(express.json())
+app.use(cookieParser())
 
 // Rate limit API routes
 app.use('/api', rateLimit({
@@ -25,6 +29,17 @@ app.use('/api', rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 }))
+
+// Stricter rate limit on auth routes (skipped in test env)
+app.use(['/auth/login', '/auth/signup', '/auth/forgot-password'], rateLimit({
+  windowMs: 60_000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => process.env.NODE_ENV === 'test',
+}))
+
+app.use('/auth', authRouter)
 
 // Serve frontend static files (InboxMy.html, landing.html from ../frontend/)
 app.use(express.static(path.resolve(__dirname, '../../frontend')))
@@ -53,6 +68,7 @@ app.get('/auth/outlook/callback', async (req, res) => {
 })
 
 // API routes
+app.use('/api', requireAuth)
 app.use('/api/accounts', accountsRouter)
 app.use('/api/emails', emailsRouter)
 app.use('/api/bills', billsRouter)
