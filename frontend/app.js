@@ -397,3 +397,59 @@ function renderSmartCard(email) {
 function showReconnectPrompt() {
   showToast('Authentication expired. Please reconnect your account.');
 }
+
+// ── ACCOUNTS ─────────────────────────────────────────────────────────────────
+let accountsData = [];
+
+async function loadAccounts() {
+  try {
+    const data = await fetchAccounts();
+    accountsData = data.accounts || [];
+
+    // Show last sync time from most recently synced account
+    const lastSynced = accountsData
+      .map(a => a.last_synced)
+      .filter(Boolean)
+      .sort()
+      .pop();
+    const status = document.getElementById('sync-status');
+    if (status && lastSynced) {
+      status.textContent = 'Last sync: ' + new Date(lastSynced).toLocaleTimeString('en-MY', {
+        hour: '2-digit', minute: '2-digit', hour12: true
+      });
+    }
+
+    renderAccounts();
+  } catch (err) {
+    showApiError(err);
+  }
+}
+
+function renderAccounts() {
+  const list = document.getElementById('accounts-list');
+  if (!list) return;
+  list.innerHTML = '';
+
+  if (accountsData.length === 0) {
+    list.innerHTML = '<div style="padding:6px 10px;font-size:11px;color:var(--ink4)">No accounts connected</div>';
+    return;
+  }
+
+  accountsData.forEach(acct => {
+    const providerColors = { gmail: '#4285f4', outlook: '#0078d4' };
+    const color = providerColors[acct.provider] || 'var(--purple)';
+
+    const el = document.createElement('div');
+    el.className = 'sb-account';
+    el.onclick = function() { setAccount(acct.id, this); };
+    el.innerHTML = `
+      <div class="acct-dot" style="background:${color}"></div>
+      <div class="acct-name" title="${escHtml(acct.email)}">${escHtml(acct.label || acct.email)}</div>
+      <div class="acct-count" id="acct-count-${escHtml(acct.id)}">—</div>`;
+    list.appendChild(el);
+  });
+
+  // Hide connect links if already at 6 accounts
+  const connectDiv = document.getElementById('accounts-connect');
+  if (connectDiv) connectDiv.style.display = accountsData.length >= 6 ? 'none' : '';
+}
