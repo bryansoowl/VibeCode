@@ -258,9 +258,13 @@ function setupInfiniteScroll() {
   observer.observe(sentinel);
 }
 
-// Stub — fully implemented in Task 7
 function showApiError(err) {
-  showToast('Error: ' + (err && err.message ? err.message : 'Unknown error'));
+  const msg = err?.message || 'Unknown error';
+  if (err?.status === 401 || err?.status === 403) {
+    showReconnectPrompt();
+  } else {
+    showToast('Error: ' + msg);
+  }
 }
 
 // ── TASK 3: EMAIL DETAIL + MARK READ ─────────────────────────────────────────
@@ -393,9 +397,36 @@ function renderSmartCard(email) {
   }
 }
 
-// Stub — fully implemented in Task 7
 function showReconnectPrompt() {
-  showToast('Authentication expired. Please reconnect your account.');
+  // Only show one banner at a time
+  const existing = document.getElementById('reconnect-banner');
+  if (existing) return;
+
+  const banner = document.createElement('div');
+  banner.id = 'reconnect-banner';
+  banner.style.cssText = [
+    'position:fixed', 'top:48px', 'left:0', 'right:0', 'z-index:500',
+    'background:var(--coral)', 'color:#fff', 'padding:10px 16px',
+    'font-size:13px', 'font-weight:500', 'display:flex', 'align-items:center',
+    'justify-content:space-between', 'gap:12px',
+  ].join(';');
+  banner.innerHTML = `
+    <span>⚠️ Account authentication expired. Reconnect to continue syncing.</span>
+    <div style="display:flex;gap:8px">
+      <a href="/api/accounts/connect/gmail"
+         style="background:#fff;color:var(--coral);padding:4px 12px;border-radius:6px;font-weight:700;text-decoration:none;font-size:12px">
+        Reconnect Gmail
+      </a>
+      <a href="/api/accounts/connect/outlook"
+         style="background:#fff;color:var(--coral);padding:4px 12px;border-radius:6px;font-weight:700;text-decoration:none;font-size:12px">
+        Reconnect Outlook
+      </a>
+      <button onclick="document.getElementById('reconnect-banner').remove()"
+              style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:12px">
+        ✕
+      </button>
+    </div>`;
+  document.body.appendChild(banner);
 }
 
 // ── ACCOUNTS ─────────────────────────────────────────────────────────────────
