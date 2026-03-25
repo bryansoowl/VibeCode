@@ -4,10 +4,15 @@ const API = '';  // same-origin: Express serves frontend at localhost:3001
 
 // ── API CLIENT ───────────────────────────────────────────────────────────────
 async function apiFetch(path, options = {}) {
-  const res = await fetch(API + path, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
-    ...options,
-  });
+  let res;
+  try {
+    res = await fetch(API + path, {
+      headers: { 'Content-Type': 'application/json', ...options.headers },
+      ...options,
+    });
+  } catch (networkErr) {
+    throw Object.assign(new Error('Network error: ' + networkErr.message), { status: 0 });
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
     throw Object.assign(new Error(err.error || `HTTP ${res.status}`), { status: res.status });
@@ -38,8 +43,10 @@ async function markRead(id) {
 }
 
 async function fetchBills(status) {
-  const p = status ? '?status=' + status : '';
-  return apiFetch('/api/bills' + p);
+  const p = new URLSearchParams();
+  if (status) p.set('status', status);
+  const qs = p.toString() ? '?' + p.toString() : '';
+  return apiFetch('/api/bills' + qs);
 }
 
 async function updateBillStatus(id, status) {
@@ -49,6 +56,10 @@ async function updateBillStatus(id, status) {
   });
 }
 
+/**
+ * Trigger a sync. Pass accountId to sync a specific account,
+ * or omit / pass null to sync all connected accounts.
+ */
 async function triggerSync(accountId) {
   return apiFetch('/api/sync/trigger', {
     method: 'POST',
