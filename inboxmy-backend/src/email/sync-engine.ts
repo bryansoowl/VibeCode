@@ -20,9 +20,11 @@ export async function syncAccount(accountId: string): Promise<{ added: number; e
 
   try {
     const sinceMs = account.last_synced ?? null
+    console.log(`[sync] Fetching emails for ${account.email} (${account.provider})…`)
     const emails: NormalizedEmail[] = account.provider === 'gmail'
       ? await fetchGmail(accountId, sinceMs)
       : await fetchOutlook(accountId, sinceMs)
+    console.log(`[sync] Fetched ${emails.length} emails, processing…`)
 
     const insertEmail = db.prepare(`
       INSERT OR IGNORE INTO emails
