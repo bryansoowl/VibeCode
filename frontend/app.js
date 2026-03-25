@@ -625,3 +625,13 @@ async function doSync() {
     btn.disabled = false;
   }
 }
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  setupInfiniteScroll();
+  await Promise.all([
+    loadAccounts(),
+    loadEmails(true),
+    loadBills(),
+  ]);
+});
