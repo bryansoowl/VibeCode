@@ -34,6 +34,34 @@ const MIGRATIONS: string[] = [
   CREATE INDEX IF NOT EXISTS idx_emails_received ON emails(received_at DESC);
   CREATE INDEX IF NOT EXISTS idx_bills_due ON parsed_bills(due_date);
   `,
+  // Migration 2: multi-user auth
+  `
+  CREATE TABLE IF NOT EXISTS users (
+    id            TEXT PRIMARY KEY,
+    email         TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    pbkdf2_salt   TEXT NOT NULL,
+    data_key_enc  TEXT NOT NULL,
+    recovery_enc  TEXT NOT NULL,
+    created_at    INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS sessions (
+    id         TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    key_enc    TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+  CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id         TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    used       INTEGER NOT NULL DEFAULT 0
+  );
+  ALTER TABLE accounts ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE;
+  CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
+  `,
 ]
 
 export function runMigrations(db: Database.Database): void {
