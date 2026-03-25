@@ -24,3 +24,20 @@ export const config = {
   },
   syncIntervalMinutes: parseInt(process.env.SYNC_INTERVAL_MINUTES ?? '15'),
 }
+
+export function validateConfig(): void {
+  const bar = '─'.repeat(44)
+  console.log(bar)
+  console.log('  InboxMY Config')
+  console.log(bar)
+
+  const googleOk = !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET)
+  console.log(`  ${googleOk ? '[✓]' : '[ ]'} Gmail (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)`)
+  if (!googleOk) console.log('      → Run: npm run setup')
+
+  const msOk = !!(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_CLIENT_SECRET)
+  console.log(`  ${msOk ? '[✓]' : '[ ]'} Outlook (MICROSOFT_CLIENT_ID, MICROSOFT_CLIENT_SECRET)`)
+  if (!msOk) console.log('      → Run: npm run setup')
+
+  console.log(bar)
+}
