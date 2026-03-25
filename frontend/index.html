@@ -322,66 +322,27 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 
   <!-- RIGHT PANEL -->
   <div id="right-panel">
-    <div class="rp-section">
-      <div class="rp-title" id="lbl-bills-due">Bills due soon</div>
-      <div class="bill-item" onclick="selectEmailById('tnb')">
-        <div class="bi-icon">⚡</div>
-        <div class="bi-info">
-          <div class="bi-name">TNB eBill</div>
-          <div class="bi-due" id="due-tnb">Due in 5 days</div>
-        </div>
-        <div class="bi-amt urgent">RM142.80</div>
+  <div class="rp-section">
+    <div class="rp-title" id="lbl-bills-due">Bills due soon</div>
+    <div id="bills-list"><div style="color:var(--ink4);font-size:12px;padding:4px 0">Loading…</div></div>
+  </div>
+  <div class="rp-section" id="orders-section" style="display:none">
+    <div class="rp-title">Recent orders</div>
+    <div id="orders-list"></div>
+  </div>
+  <div class="rp-section">
+    <div class="rp-title">This month</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:10px;text-align:center">
+        <div id="bills-total-amt" style="font-family:var(--serif);font-size:19px;font-weight:600;color:var(--coral)">RM—</div>
+        <div style="font-size:10px;color:var(--ink4);margin-top:2px" id="lbl-bills-total">Bills total</div>
       </div>
-      <div class="bill-item" onclick="selectEmailById('unifi')">
-        <div class="bi-icon">📡</div>
-        <div class="bi-info">
-          <div class="bi-name">Unifi by TM</div>
-          <div class="bi-due">Due in 11 days</div>
-        </div>
-        <div class="bi-amt">RM129.00</div>
-      </div>
-      <div class="bill-item">
-        <div class="bi-icon">📱</div>
-        <div class="bi-info">
-          <div class="bi-name">Celcom Postpaid</div>
-          <div class="bi-due">Due in 18 days</div>
-        </div>
-        <div class="bi-amt">RM58.00</div>
+      <div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:10px;text-align:center">
+        <div id="bills-overdue-count" style="font-family:var(--serif);font-size:19px;font-weight:600;color:var(--amber)">0</div>
+        <div style="font-size:10px;color:var(--ink4);margin-top:2px">Overdue</div>
       </div>
     </div>
-
-    <div class="rp-section">
-      <div class="rp-title">Recent orders</div>
-      <div class="order-item" onclick="selectEmailById('shopee')">
-        <div class="oi-shop">Shopee</div>
-        <div class="oi-name">Mechanical Keyboard TKL</div>
-        <div class="oi-status"><div class="oi-dot"></div>Shipped · arriving Thu</div>
-      </div>
-      <div class="order-item" onclick="selectEmailById('lazada')">
-        <div class="oi-shop">Lazada</div>
-        <div class="oi-name">USB-C Hub 7-in-1</div>
-        <div class="oi-status"><div class="oi-dot" style="background:var(--amber)"></div>Processing</div>
-      </div>
-      <div class="order-item">
-        <div class="oi-shop">Shopee</div>
-        <div class="oi-name">Minyak gamat lotion 200ml</div>
-        <div class="oi-status"><div class="oi-dot" style="background:var(--ink4)"></div>Delivered · Oct 18</div>
-      </div>
-    </div>
-
-    <div class="rp-section">
-      <div class="rp-title">This month</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:10px;text-align:center">
-          <div style="font-family:var(--serif);font-size:19px;font-weight:600;color:var(--coral)">RM329</div>
-          <div style="font-size:10px;color:var(--ink4);margin-top:2px" id="lbl-bills-total">Bills total</div>
-        </div>
-        <div style="background:#fff;border:1px solid var(--border);border-radius:9px;padding:10px;text-align:center">
-          <div style="font-family:var(--serif);font-size:19px;font-weight:600;color:var(--purple)">RM187</div>
-          <div style="font-size:10px;color:var(--ink4);margin-top:2px" id="lbl-shopping">Shopping</div>
-        </div>
-      </div>
-    </div>
+  </div>
   </div>
 </div>
 

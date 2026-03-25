@@ -453,3 +453,115 @@ function renderAccounts() {
   const connectDiv = document.getElementById('accounts-connect');
   if (connectDiv) connectDiv.style.display = accountsData.length >= 6 ? 'none' : '';
 }
+
+// ── BILLS PANEL ───────────────────────────────────────────────────────────────
+async function loadBills() {
+  try {
+    // Fetch unpaid + overdue bills, and all receipts (Shopee/Lazada orders)
+    const [unpaid, overdue, receipts] = await Promise.all([
+      fetchBills('unpaid'),
+      fetchBills('overdue'),
+      fetchBills(),  // all statuses — filter for receipt billers client-side
+    ]);
+    const bills = [...(overdue.bills || []), ...(unpaid.bills || [])];
+    const orders = (receipts.bills || []).filter(b =>
+      b.biller && /shopee|lazada/i.test(b.biller)
+    );
+    renderBillsPanel(bills, orders);
+  } catch (err) {
+    const list = document.getElementById('bills-list');
+    if (list) list.innerHTML = '<div style="color:var(--coral);font-size:12px">Failed to load bills</div>';
+  }
+}
+
+const BILLER_ICON = {
+  TNB: '⚡', Unifi: '📡', Celcom: '📱', Maxis: '📱', Digi: '📱',
+  'Touch n Go': '💳', LHDN: '🏛️', MySejahtera: '💉',
+  Shopee: '🛍️', Lazada: '🛍️',
+};
+
+function getBillerIcon(biller) {
+  for (const [key, icon] of Object.entries(BILLER_ICON)) {
+    if (biller && biller.toLowerCase().includes(key.toLowerCase())) return icon;
+  }
+  return '📄';
+}
+
+function renderBillsPanel(bills, orders = []) {
+  // Render recent orders (Shopee / Lazada receipts)
+  const ordersSection = document.getElementById('orders-section');
+  const ordersList = document.getElementById('orders-list');
+  if (ordersSection && ordersList) {
+    if (orders.length === 0) {
+      ordersSection.style.display = 'none';
+    } else {
+      ordersSection.style.display = '';
+      ordersList.innerHTML = '';
+      orders.slice(0, 3).forEach(o => {
+        const el = document.createElement('div');
+        el.className = 'order-item';
+        const shop = /shopee/i.test(o.biller) ? 'Shopee' : /lazada/i.test(o.biller) ? 'Lazada' : o.biller;
+        const shopColor = /shopee/i.test(o.biller) ? 'var(--coral)' : 'var(--amber)';
+        const amt = o.amount_rm != null ? 'RM' + Number(o.amount_rm).toFixed(2) : '';
+        el.innerHTML = `
+          <div class="oi-shop" style="color:${shopColor}">${escHtml(shop)}</div>
+          <div class="oi-name">${escHtml(o.subject || o.biller)}</div>
+          <div class="oi-status"><div class="oi-dot"></div>${escHtml(amt)}</div>`;
+        ordersList.appendChild(el);
+      });
+    }
+  }
+
+  // Render bills due soon
+  const list = document.getElementById('bills-list');
+  if (!list) return;
+
+  if (bills.length === 0) {
+    list.innerHTML = '<div style="color:var(--ink4);font-size:12px;padding:4px 0">No unpaid bills 🎉</div>';
+    document.getElementById('bills-total-amt').textContent = 'RM0.00';
+    document.getElementById('bills-overdue-count').textContent = '0';
+    return;
+  }
+
+  list.innerHTML = '';
+  let total = 0;
+  let overdueCount = 0;
+  const now = Date.now();
+
+  bills.slice(0, 5).forEach(bill => {
+    const amt = bill.amount_rm != null ? Number(bill.amount_rm) : 0;
+    total += amt;
+    const isOverdue = bill.status === 'overdue' || (bill.due_date && bill.due_date < now);
+    if (isOverdue) overdueCount++;
+
+    const daysUntilDue = bill.due_date
+      ? Math.ceil((bill.due_date - now) / 86_400_000)
+      : null;
+    const dueText = daysUntilDue == null ? 'No due date'
+      : daysUntilDue < 0 ? `Overdue by ${Math.abs(daysUntilDue)}d`
+      : daysUntilDue === 0 ? 'Due today'
+      : `Due in ${daysUntilDue} day${daysUntilDue === 1 ? '' : 's'}`;
+
+    const el = document.createElement('div');
+    el.className = 'bill-item';
+    el.innerHTML = `
+      <div class="bi-icon">${getBillerIcon(bill.biller)}</div>
+      <div class="bi-info">
+        <div class="bi-name">${escHtml(bill.biller || 'Unknown')}</div>
+        <div class="bi-due">${dueText}</div>
+      </div>
+      <div class="bi-amt${isOverdue ? ' urgent' : ''}">RM${amt.toFixed(2)}</div>`;
+
+    el.title = 'Click to mark as paid';
+    el.onclick = () => {
+      updateBillStatus(bill.id, 'paid')
+        .then(() => { showToast('Marked as paid!'); loadBills(); })
+        .catch(err => showApiError(err));
+    };
+
+    list.appendChild(el);
+  });
+
+  document.getElementById('bills-total-amt').textContent = 'RM' + total.toFixed(2);
+  document.getElementById('bills-overdue-count').textContent = String(overdueCount);
+}
