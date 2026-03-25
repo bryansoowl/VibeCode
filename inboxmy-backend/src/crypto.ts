@@ -1,13 +1,15 @@
 // src/crypto.ts
 import forge from 'node-forge'
-import { pbkdf2Sync } from 'crypto'
+import { pbkdf2Sync, randomBytes } from 'crypto'
 import { config } from './config'
 
 // ─── Internal AES-256-GCM helpers ────────────────────────────────────────────
 
 function aesEncrypt(plaintext: string, keyBuf: Buffer): string {
+  // 'binary' encoding maps each byte to its Latin-1 char — required by node-forge's buffer API
   const keyBytes = forge.util.createBuffer(keyBuf.toString('binary'))
-  const iv = forge.random.getBytesSync(12)
+  const ivBytes = randomBytes(12)
+  const iv = ivBytes.toString('binary')
   const cipher = forge.cipher.createCipher('AES-GCM', keyBytes)
   cipher.start({ iv })
   cipher.update(forge.util.createBuffer(plaintext, 'utf8'))
@@ -17,6 +19,7 @@ function aesEncrypt(plaintext: string, keyBuf: Buffer): string {
 }
 
 function aesDecrypt(ciphertext: string, keyBuf: Buffer): string {
+  // 'binary' encoding maps each byte to its Latin-1 char — required by node-forge's buffer API
   const keyBytes = forge.util.createBuffer(keyBuf.toString('binary'))
   const combined = forge.util.decode64(ciphertext)
   const iv = combined.slice(0, 12)

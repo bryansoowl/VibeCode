@@ -22,7 +22,9 @@ describe('encryptSystem / decryptSystem (global ENCRYPTION_KEY)', () => {
 
   it('throws on tampered ciphertext', () => {
     const cipher = encryptSystem('safe')
-    expect(() => decryptSystem(cipher + 'x')).toThrow()
+    const raw = Buffer.from(cipher, 'base64')
+    raw[14] ^= 0xff  // flip a byte inside the 16-byte GCM tag (bytes 12–27)
+    expect(() => decryptSystem(raw.toString('base64'))).toThrow()
   })
 })
 
