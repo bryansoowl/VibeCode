@@ -1,5 +1,5 @@
 import { getDb } from '../db'
-import { encrypt } from '../crypto'
+import { encryptSystem } from '../crypto'
 import { fetchNewEmails as fetchGmail } from './gmail-client'
 import { fetchNewEmails as fetchOutlook } from './outlook-client'
 import { parseEmail } from '../parsers'
@@ -45,12 +45,12 @@ export async function syncAccount(accountId: string): Promise<{ added: number; e
 
         const result = insertEmail.run(
           email.id, accountId, email.threadId ?? null,
-          encrypt(email.subject),
+          encryptSystem(email.subject),
           email.sender, email.senderName ?? null,
           email.receivedAt, email.isRead ? 1 : 0,
           parsed.category ?? null,
-          body ? encrypt(body) : null,
-          email.snippet ? encrypt(email.snippet) : null,
+          body ? encryptSystem(body) : null,
+          email.snippet ? encryptSystem(email.snippet) : null,
           email.rawSize
         )
 

@@ -2,7 +2,7 @@
 import { google } from 'googleapis'
 import { randomUUID } from 'crypto'
 import { getDb } from '../db'
-import { encrypt } from '../crypto'
+import { encryptSystem } from '../crypto'
 import { saveToken, loadToken } from './token-store'
 import { config } from '../config'
 
@@ -52,7 +52,7 @@ export async function handleCallback(code: string): Promise<string> {
     INSERT INTO accounts (id, provider, email, token_enc, created_at)
     VALUES (?, 'gmail', ?, ?, ?)
     ON CONFLICT(email) DO UPDATE SET token_enc = excluded.token_enc
-  `).run(accountId, email, encrypt(JSON.stringify(tokenData)), Date.now())
+  `).run(accountId, email, encryptSystem(JSON.stringify(tokenData)), Date.now())
 
   return accountId
 }

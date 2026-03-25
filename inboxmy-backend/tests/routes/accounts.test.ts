@@ -3,14 +3,14 @@ import { describe, it, expect, afterAll } from 'vitest'
 import request from 'supertest'
 import { app } from '../../src/server'
 import { getDb, closeDb } from '../../src/db'
-import { encrypt } from '../../src/crypto'
+import { encryptSystem } from '../../src/crypto'
 import { randomUUID } from 'crypto'
 
 function seedAccount(id: string, email: string) {
   getDb().prepare(`
     INSERT OR IGNORE INTO accounts (id, provider, email, token_enc, created_at)
     VALUES (?, 'gmail', ?, ?, ?)
-  `).run(id, email, encrypt('{}'), Date.now())
+  `).run(id, email, encryptSystem('{}'), Date.now())
 }
 
 afterAll(() => closeDb())
