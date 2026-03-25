@@ -52,10 +52,160 @@ export function buildEnvContent(opts: EnvOptions): string {
   ].join('\n')
 }
 
+// ── Wizard helpers ────────────────────────────────────────────────────────────
+
+async function prompt(rl: readline.Interface, question: string): Promise<string> {
+  return new Promise((resolve) => rl.question(question, resolve))
+}
+
+async function promptWithValidation(
+  rl: readline.Interface,
+  question: string,
+  validate: (val: string) => boolean,
+  hint: string,
+  maxAttempts = 3
+): Promise<string | null> {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const answer = (await prompt(rl, question)).trim()
+    if (validate(answer)) return answer
+    if (attempt < maxAttempts) {
+      console.log(`  ✗ ${hint} (${maxAttempts - attempt} attempt${maxAttempts - attempt === 1 ? '' : 's'} remaining)`)
+    } else {
+      console.log(`\n  ✗ Too many invalid attempts. Setup aborted — .env was not written.\n`)
+    }
+  }
+  return null
+}
+
 // ── Wizard (only runs when invoked directly) ─────────────────────────────────
 
 async function main(): Promise<void> {
-  // Implemented in Task 5
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+
+  console.log('\n╔══════════════════════════════════════════╗')
+  console.log('║  InboxMY — First-time Setup              ║')
+  console.log('╚══════════════════════════════════════════╝\n')
+
+  // Check for existing .env
+  const envPath = path.join(process.cwd(), '.env')
+  if (fs.existsSync(envPath)) {
+    const answer = (await prompt(rl, '⚠  .env already exists. Overwrite? (y/N): ')).trim().toLowerCase()
+    if (answer !== 'y') {
+      console.log('\nAborted — existing .env was not changed.\n')
+      rl.close()
+      return
+    }
+  }
+
+  // Provider selection
+  console.log('Which email providers do you want to connect?')
+  console.log('  1) Gmail only')
+  console.log('  2) Outlook only')
+  console.log('  3) Both Gmail and Outlook\n')
+  const choice = (await prompt(rl, '> ')).trim()
+  const wantGmail = choice === '1' || choice === '3'
+  const wantOutlook = choice === '2' || choice === '3'
+
+  if (!wantGmail && !wantOutlook) {
+    console.log('\nInvalid choice. Please re-run npm run setup and enter 1, 2, or 3.\n')
+    rl.close()
+    return
+  }
+
+  // Generate encryption key
+  const encryptionKey = crypto.randomBytes(32).toString('hex')
+  console.log('\n✓ ENCRYPTION_KEY generated automatically.\n')
+
+  // Gmail setup
+  let googleClientId = ''
+  let googleClientSecret = ''
+
+  if (wantGmail) {
+    console.log('─── Gmail Setup ' + '─'.repeat(28))
+    console.log('  Full guide: SETUP.md → Section 1 (Google Cloud)')
+    console.log('  1. Go to https://console.cloud.google.com')
+    console.log('  2. Create or select a project')
+    console.log('  3. APIs & Services → Enable APIs → search "Gmail API" → Enable')
+    console.log('  4. APIs & Services → OAuth consent screen → External → fill in app name')
+    console.log('  5. Test users → Add your Gmail address')
+    console.log('  6. Credentials → Create Credentials → OAuth 2.0 Client ID → Web application')
+    console.log('  7. Add redirect URI: http://localhost:3001/auth/gmail/callback')
+    console.log('  8. Copy your Client ID and Client Secret below\n')
+
+    const id = await promptWithValidation(
+      rl,
+      'Enter GOOGLE_CLIENT_ID: ',
+      isValidGoogleClientId,
+      'Must end with .apps.googleusercontent.com'
+    )
+    if (id === null) { rl.close(); return }
+    googleClientId = id
+
+    const secret = await promptWithValidation(
+      rl,
+      'Enter GOOGLE_CLIENT_SECRET: ',
+      isValidSecret,
+      'Secret cannot be empty'
+    )
+    if (secret === null) { rl.close(); return }
+    googleClientSecret = secret
+  }
+
+  // Outlook setup
+  let microsoftClientId = ''
+  let microsoftClientSecret = ''
+
+  if (wantOutlook) {
+    console.log('\n─── Outlook Setup ' + '─'.repeat(26))
+    console.log('  Full guide: SETUP.md → Section 2 (Azure Portal)')
+    console.log('  1. Go to https://portal.azure.com')
+    console.log('  2. Search "App registrations" → New registration')
+    console.log('  3. Name: InboxMY')
+    console.log('  4. Supported account types: "Accounts in any organizational directory')
+    console.log('     and personal Microsoft accounts (Outlook.com, Hotmail)"')
+    console.log('  5. Redirect URI (Web): http://localhost:3001/auth/outlook/callback')
+    console.log('  6. Register → copy the Application (client) ID shown on the overview page')
+    console.log('  7. API permissions → Add a permission → Microsoft Graph → Delegated')
+    console.log('     → add Mail.Read and User.Read → Grant admin consent')
+    console.log('  8. Certificates & secrets → New client secret → copy the Value (not ID)\n')
+
+    const id = await promptWithValidation(
+      rl,
+      'Enter MICROSOFT_CLIENT_ID: ',
+      isValidAzureClientId,
+      'Must be a UUID like xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'
+    )
+    if (id === null) { rl.close(); return }
+    microsoftClientId = id
+
+    const secret = await promptWithValidation(
+      rl,
+      'Enter MICROSOFT_CLIENT_SECRET: ',
+      isValidSecret,
+      'Secret cannot be empty'
+    )
+    if (secret === null) { rl.close(); return }
+    microsoftClientSecret = secret
+  }
+
+  // Write .env
+  const content = buildEnvContent({
+    encryptionKey,
+    googleClientId,
+    googleClientSecret,
+    microsoftClientId,
+    microsoftClientSecret,
+  })
+
+  fs.writeFileSync(envPath, content, 'utf-8')
+
+  console.log('\n─── Done ' + '─'.repeat(35))
+  console.log(`✓ .env written to ${envPath}`)
+  console.log('\nStart the server with:')
+  console.log('  npm run build && npm start')
+  console.log('\nThen open http://localhost:3001 in your browser.\n')
+
+  rl.close()
 }
 
 if (require.main === module) {
