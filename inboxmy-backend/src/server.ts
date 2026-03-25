@@ -1,7 +1,6 @@
 // src/server.ts
 import express from 'express'
 import cors from 'cors'
-import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import path from 'path'
 import { config } from './config'
@@ -16,8 +15,6 @@ import { startScheduler } from './scheduler'
 
 export const app = express()
 
-// CSP disabled — app is local-only (127.0.0.1), inline onclick handlers in frontend need it off
-app.use(helmet({ contentSecurityPolicy: false }))
 app.use(cors({ origin: ['http://localhost:3000', 'http://localhost:5173'] }))
 app.use(express.json())
 
