@@ -2,6 +2,7 @@
 import { Router } from 'express'
 import { randomBytes, createHash } from 'crypto'
 import { randomUUID } from 'crypto'
+import nodemailer from 'nodemailer'
 import bcrypt from 'bcryptjs'
 import { getDb } from '../db'
 import { config } from '../config'
@@ -108,4 +109,88 @@ authRouter.post('/logout', requireAuth, (req, res) => {
 // GET /auth/me
 authRouter.get('/me', requireAuth, (req, res) => {
   res.json({ user: { id: (req as any).user.id, email: (req as any).user.email } })
+})
+
+// POST /auth/forgot-password
+authRouter.post('/forgot-password', async (req, res) => {
+  const { email } = req.body
+  // Always return 200 FIRST — prevents email enumeration and avoids ERR_HTTP_HEADERS_SENT
+  // if any post-response side effect throws (DB insert, SMTP send).
+  res.json({ ok: true })
+
+  if (!email || typeof email !== 'string') return
+
+  // All side effects wrapped in try/catch — errors log to console, never propagate
+  try {
+    const db = getDb()
+    const user = db.prepare('SELECT id FROM users WHERE email = ?')
+      .get((email as string).toLowerCase()) as any
+    if (!user) return
+
+    const rawToken = randomBytes(32).toString('hex')
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex')
+    db.prepare(
+      'INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, used) VALUES (?, ?, ?, ?, 0)'
+    ).run(randomUUID(), user.id, tokenHash, Date.now() + 3600_000)
+
+    const resetLink = `${config.appUrl}/reset-password?token=${rawToken}`
+
+    if (config.smtp.host) {
+      const transporter = nodemailer.createTransport({
+        host: config.smtp.host,
+        port: config.smtp.port,
+        auth: { user: config.smtp.user, pass: config.smtp.pass },
+      })
+      await transporter.sendMail({
+        from: `InboxMY <noreply@${config.smtp.host}>`,
+        to: email,
+        subject: 'Reset your InboxMY password',
+        text: `Click this link to reset your password (expires in 1 hour):\n\n${resetLink}`,
+      })
+    } else {
+      console.log('[InboxMY] Password reset link:', resetLink)
+    }
+  } catch (err: any) {
+    console.error('[auth] forgot-password side effect error:', err.message)
+  }
+})
+
+// POST /auth/reset-password
+authRouter.post('/reset-password', async (req, res) => {
+  const { token, newPassword } = req.body
+  if (!token || !newPassword) {
+    return res.status(400).json({ error: 'token and newPassword are required' })
+  }
+  const pwErr = validatePassword(newPassword)
+  if (pwErr) return res.status(400).json({ error: pwErr })
+
+  const tokenHash = createHash('sha256').update(token as string).digest('hex')
+  const db = getDb()
+  const tokenRow = db.prepare(
+    'SELECT id, user_id, expires_at, used FROM password_reset_tokens WHERE token_hash = ?'
+  ).get(tokenHash) as any
+
+  if (!tokenRow) return res.status(400).json({ error: 'Reset link is invalid.' })
+  if (tokenRow.used) return res.status(400).json({ error: 'Reset link has already been used.' })
+  if (tokenRow.expires_at < Date.now()) return res.status(400).json({ error: 'Reset link has expired. Request a new one.' })
+
+  const user = db.prepare('SELECT id, pbkdf2_salt, recovery_enc FROM users WHERE id = ?')
+    .get(tokenRow.user_id) as any
+
+  const recoveryKeyBuf = Buffer.from(config.recoverySecret, 'hex')
+  const dataKey = unwrapKey(user.recovery_enc, recoveryKeyBuf)
+
+  const newSalt = randomBytes(32)
+  const newWrapKey = deriveWrapKey(newPassword as string, newSalt)
+  const newDataKeyEnc = wrapKey(dataKey, newWrapKey)
+  const newPasswordHash = await bcrypt.hash(newPassword as string, 12)
+
+  db.prepare(`
+    UPDATE users SET password_hash = ?, pbkdf2_salt = ?, data_key_enc = ? WHERE id = ?
+  `).run(newPasswordHash, newSalt.toString('base64'), newDataKeyEnc, user.id)
+
+  db.prepare('UPDATE password_reset_tokens SET used = 1 WHERE id = ?').run(tokenRow.id)
+  db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id)
+
+  res.json({ ok: true })
 })
