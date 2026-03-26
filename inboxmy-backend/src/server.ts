@@ -41,6 +41,10 @@ app.use(['/auth/login', '/auth/signup', '/auth/forgot-password'], rateLimit({
 
 app.use('/auth', authRouter)
 
+app.get('/auth', (req, res) => {
+  res.sendFile(path.resolve(__dirname, '../../frontend/auth.html'))
+})
+
 // Serve frontend static files (InboxMy.html, landing.html from ../frontend/)
 app.use(express.static(path.resolve(__dirname, '../../frontend')))
 

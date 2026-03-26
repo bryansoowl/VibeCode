@@ -1,4 +1,26 @@
 // frontend/app.js
+// Auth check — redirect to /auth if not logged in
+(async function checkAuth() {
+  try {
+    const res = await fetch('/auth/me')
+    if (!res.ok) {
+      window.location.href = '/auth'
+      return
+    }
+    const { user } = await res.json()
+    // Display user email if there's a header element for it
+    const emailEl = document.getElementById('userEmail')
+    if (emailEl) emailEl.textContent = user.email
+  } catch {
+    window.location.href = '/auth'
+  }
+})()
+
+async function handleSignOut() {
+  await fetch('/auth/logout', { method: 'POST' })
+  window.location.href = '/auth'
+}
+
 // ── CONFIG ──────────────────────────────────────────────────────────────────
 const API = '';  // same-origin: Express serves frontend at localhost:3001
 
