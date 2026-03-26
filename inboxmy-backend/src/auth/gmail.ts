@@ -27,18 +27,19 @@ export function getAuthUrl(state?: string): string {
   })
 }
 
-export async function handleCallback(code: string): Promise<string> {
+export async function handleCallback(code: string, userId: string): Promise<string> {
   const client = getOAuthClient()
   const { tokens } = await client.getToken(code)
 
-  // Get user email
   client.setCredentials(tokens)
   const oauth2 = google.oauth2({ version: 'v2', auth: client })
   const { data } = await oauth2.userinfo.get()
   const email = data.email!
 
   const db = getDb()
-  const existing = db.prepare('SELECT id FROM accounts WHERE email = ?').get(email) as any
+  const existing = db.prepare(
+    'SELECT id FROM accounts WHERE email = ? AND user_id = ?'
+  ).get(email, userId) as any
   const accountId = existing?.id ?? randomUUID()
 
   const tokenData = {
@@ -47,12 +48,11 @@ export async function handleCallback(code: string): Promise<string> {
     expiryMs: tokens.expiry_date ?? Date.now() + 3600_000,
   }
 
-  // Upsert — avoids race condition if two auth flows complete simultaneously
   db.prepare(`
-    INSERT INTO accounts (id, provider, email, token_enc, created_at)
-    VALUES (?, 'gmail', ?, ?, ?)
-    ON CONFLICT(email) DO UPDATE SET token_enc = excluded.token_enc
-  `).run(accountId, email, encryptSystem(JSON.stringify(tokenData)), Date.now())
+    INSERT INTO accounts (id, provider, email, token_enc, created_at, user_id)
+    VALUES (?, 'gmail', ?, ?, ?, ?)
+    ON CONFLICT(email) DO UPDATE SET token_enc = excluded.token_enc, user_id = excluded.user_id
+  `).run(accountId, email, encryptSystem(JSON.stringify(tokenData)), Date.now(), userId)
 
   return accountId
 }

@@ -6,6 +6,7 @@ import { decrypt } from '../crypto'
 export const billsRouter = Router()
 
 billsRouter.get('/', (req, res) => {
+  const user = (req as any).user
   const db = getDb()
   const { status } = req.query
 
@@ -14,10 +15,11 @@ billsRouter.get('/', (req, res) => {
       e.subject_enc, e.received_at, e.account_id
     FROM parsed_bills pb
     JOIN emails e ON e.id = pb.email_id
-    WHERE 1=1
+    JOIN accounts a ON a.id = e.account_id
+    WHERE a.user_id = ?
   `
   const VALID_STATUSES = ['unpaid', 'paid', 'overdue']
-  const params: any[] = []
+  const params: any[] = [user.id]
   if (status) {
     if (!VALID_STATUSES.includes(status as string)) {
       return res.status(400).json({ error: 'Invalid status filter' })
@@ -31,7 +33,7 @@ billsRouter.get('/', (req, res) => {
   try {
     const bills = rows.map(r => ({
       ...r,
-      subject: decrypt(r.subject_enc),
+      subject: decrypt(r.subject_enc, user.dataKey),
       subject_enc: undefined,
     }))
     res.json({ bills })
@@ -45,8 +47,14 @@ billsRouter.patch('/:id/status', (req, res) => {
   if (!['unpaid', 'paid', 'overdue'].includes(status)) {
     return res.status(400).json({ error: 'Invalid status' })
   }
+  const user = (req as any).user
   const db = getDb()
-  const existing = db.prepare('SELECT id FROM parsed_bills WHERE id = ?').get(req.params.id)
+  const existing = db.prepare(`
+    SELECT pb.id FROM parsed_bills pb
+    JOIN emails e ON e.id = pb.email_id
+    JOIN accounts a ON a.id = e.account_id
+    WHERE pb.id = ? AND a.user_id = ?
+  `).get(req.params.id, user.id)
   if (!existing) return res.status(404).json({ error: 'Bill not found' })
   db.prepare('UPDATE parsed_bills SET status = ? WHERE id = ?').run(status, req.params.id)
   res.json({ ok: true })

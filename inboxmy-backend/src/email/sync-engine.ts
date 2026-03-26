@@ -1,12 +1,16 @@
+// src/email/sync-engine.ts
 import { getDb } from '../db'
-import { encryptSystem } from '../crypto'
+import { encrypt } from '../crypto'
 import { fetchNewEmails as fetchGmail } from './gmail-client'
 import { fetchNewEmails as fetchOutlook } from './outlook-client'
 import { parseEmail } from '../parsers'
 import { randomUUID } from 'crypto'
 import type { NormalizedEmail } from './types'
 
-export async function syncAccount(accountId: string): Promise<{ added: number; errors: string[] }> {
+export async function syncAccount(
+  accountId: string,
+  dataKey: Buffer
+): Promise<{ added: number; errors: string[] }> {
   const db = getDb()
   const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(accountId) as any
   if (!account) throw new Error(`Account ${accountId} not found`)
@@ -45,12 +49,12 @@ export async function syncAccount(accountId: string): Promise<{ added: number; e
 
         const result = insertEmail.run(
           email.id, accountId, email.threadId ?? null,
-          encryptSystem(email.subject),
+          encrypt(email.subject, dataKey),
           email.sender, email.senderName ?? null,
           email.receivedAt, email.isRead ? 1 : 0,
           parsed.category ?? null,
-          body ? encryptSystem(body) : null,
-          email.snippet ? encryptSystem(email.snippet) : null,
+          body ? encrypt(body, dataKey) : null,
+          email.snippet ? encrypt(email.snippet, dataKey) : null,
           email.rawSize
         )
 
@@ -82,10 +86,10 @@ export async function syncAccount(accountId: string): Promise<{ added: number; e
   return { added, errors }
 }
 
-export async function syncAllAccounts(): Promise<void> {
+export async function syncAllAccounts(userId: string, dataKey: Buffer): Promise<void> {
   const db = getDb()
-  const accounts = db.prepare('SELECT id FROM accounts').all() as any[]
+  const accounts = db.prepare('SELECT id FROM accounts WHERE user_id = ?').all(userId) as any[]
   for (const acc of accounts) {
-    await syncAccount(acc.id)
+    await syncAccount(acc.id, dataKey)
   }
 }

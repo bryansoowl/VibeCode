@@ -27,7 +27,7 @@ export async function getAuthUrl(state?: string): Promise<string> {
   })
 }
 
-export async function handleCallback(code: string): Promise<string> {
+export async function handleCallback(code: string, userId: string): Promise<string> {
   const app = getMsalApp()
   const result = await app.acquireTokenByCode({
     code,
@@ -37,21 +37,22 @@ export async function handleCallback(code: string): Promise<string> {
 
   const email = result.account?.username!
   const db = getDb()
-  const existing = db.prepare('SELECT id FROM accounts WHERE email = ?').get(email) as any
+  const existing = db.prepare(
+    'SELECT id FROM accounts WHERE email = ? AND user_id = ?'
+  ).get(email, userId) as any
   const accountId = existing?.id ?? randomUUID()
 
   const tokenData = {
     accessToken: result.accessToken,
-    refreshToken: '',          // MSAL handles refresh internally via cache
+    refreshToken: '',
     expiryMs: result.expiresOn?.getTime() ?? Date.now() + 3600_000,
   }
 
-  // Upsert — avoids race condition on concurrent auth
   db.prepare(`
-    INSERT INTO accounts (id, provider, email, token_enc, created_at)
-    VALUES (?, 'outlook', ?, ?, ?)
-    ON CONFLICT(email) DO UPDATE SET token_enc = excluded.token_enc
-  `).run(accountId, email, encryptSystem(JSON.stringify(tokenData)), Date.now())
+    INSERT INTO accounts (id, provider, email, token_enc, created_at, user_id)
+    VALUES (?, 'outlook', ?, ?, ?, ?)
+    ON CONFLICT(email) DO UPDATE SET token_enc = excluded.token_enc, user_id = excluded.user_id
+  `).run(accountId, email, encryptSystem(JSON.stringify(tokenData)), Date.now(), userId)
 
   return accountId
 }

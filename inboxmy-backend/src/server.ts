@@ -46,10 +46,20 @@ app.use(express.static(path.resolve(__dirname, '../../frontend')))
 
 // OAuth callbacks (called by Google/Microsoft redirect)
 app.get('/auth/gmail/callback', async (req, res) => {
-  const { code, error } = req.query
+  const { code, error, state } = req.query
   if (error || !code) return res.status(400).send(`OAuth error: ${error}`)
+  if (!state) return res.status(400).send('OAuth error: missing state')
+
+  const db = getDb()
+  const session = db.prepare(
+    'SELECT user_id, created_at FROM sessions WHERE id = ?'
+  ).get(state as string) as any
+  if (!session || Date.now() - session.created_at > SESSION_TTL_MS) {
+    return res.status(400).send('Invalid or expired session. Please reconnect from the dashboard.')
+  }
+
   try {
-    const accountId = await gmailCallback(code as string)
+    const accountId = await gmailCallback(code as string, session.user_id)
     res.send(`<script>window.close()</script><p>Gmail connected! Account: ${accountId}</p>`)
   } catch (err: any) {
     res.status(500).send(err.message)
@@ -57,10 +67,20 @@ app.get('/auth/gmail/callback', async (req, res) => {
 })
 
 app.get('/auth/outlook/callback', async (req, res) => {
-  const { code, error } = req.query
+  const { code, error, state } = req.query
   if (error || !code) return res.status(400).send(`OAuth error: ${error}`)
+  if (!state) return res.status(400).send('OAuth error: missing state')
+
+  const db = getDb()
+  const session = db.prepare(
+    'SELECT user_id, created_at FROM sessions WHERE id = ?'
+  ).get(state as string) as any
+  if (!session || Date.now() - session.created_at > SESSION_TTL_MS) {
+    return res.status(400).send('Invalid or expired session. Please reconnect from the dashboard.')
+  }
+
   try {
-    const accountId = await outlookCallback(code as string)
+    const accountId = await outlookCallback(code as string, session.user_id)
     res.send(`<script>window.close()</script><p>Outlook connected! Account: ${accountId}</p>`)
   } catch (err: any) {
     res.status(500).send(err.message)
@@ -79,6 +99,8 @@ app.get('/health', (req, res) => res.json({ ok: true, ts: Date.now() }))
 if (require.main === module) {
   validateConfig()           // ← add as first statement
   getDb() // initialise DB on start
+  // Clean up any accounts without a user_id (dev data from pre-Plan-4 runs)
+  getDb().prepare('DELETE FROM accounts WHERE user_id IS NULL').run()
   startScheduler()
   const port = config.port
   app.listen(port, '127.0.0.1', () => {
