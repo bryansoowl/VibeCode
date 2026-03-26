@@ -19,10 +19,17 @@ export function isValidSecret(secret: string): boolean {
 
 export interface EnvOptions {
   encryptionKey: string
+  sessionSecret: string
+  recoverySecret: string
+  appUrl: string
   googleClientId: string
   googleClientSecret: string
   microsoftClientId: string
   microsoftClientSecret: string
+  smtpHost: string
+  smtpPort: string
+  smtpUser: string
+  smtpPass: string
 }
 
 export function buildEnvContent(opts: EnvOptions): string {
@@ -36,6 +43,13 @@ export function buildEnvContent(opts: EnvOptions): string {
     '# Encryption (auto-generated — do not change or you cannot decrypt your data)',
     `ENCRYPTION_KEY=${opts.encryptionKey}`,
     '',
+    '# Session and password reset (auto-generated)',
+    `SESSION_SECRET=${opts.sessionSecret}`,
+    `RECOVERY_SECRET=${opts.recoverySecret}`,
+    '',
+    '# App URL',
+    `APP_URL=${opts.appUrl}`,
+    '',
     '# Google OAuth (Gmail)',
     `GOOGLE_CLIENT_ID=${opts.googleClientId}`,
     `GOOGLE_CLIENT_SECRET=${opts.googleClientSecret}`,
@@ -45,6 +59,12 @@ export function buildEnvContent(opts: EnvOptions): string {
     `MICROSOFT_CLIENT_ID=${opts.microsoftClientId}`,
     `MICROSOFT_CLIENT_SECRET=${opts.microsoftClientSecret}`,
     'MICROSOFT_REDIRECT_URI=http://localhost:3001/auth/outlook/callback',
+    '',
+    '# SMTP (optional, for password reset emails)',
+    `SMTP_HOST=${opts.smtpHost}`,
+    `SMTP_PORT=${opts.smtpPort}`,
+    `SMTP_USER=${opts.smtpUser}`,
+    `SMTP_PASS=${opts.smtpPass}`,
     '',
     '# Sync interval in minutes (default: 15)',
     'SYNC_INTERVAL_MINUTES=15',
@@ -112,9 +132,13 @@ async function main(): Promise<void> {
     return
   }
 
-  // Generate encryption key
+  // Generate encryption key and secrets
   const encryptionKey = crypto.randomBytes(32).toString('hex')
-  console.log('\n✓ ENCRYPTION_KEY generated automatically.\n')
+  const sessionSecret = crypto.randomBytes(32).toString('hex')
+  const recoverySecret = crypto.randomBytes(32).toString('hex')
+  console.log('\n✓ ENCRYPTION_KEY generated automatically.')
+  console.log('✓ SESSION_SECRET generated automatically.')
+  console.log('✓ RECOVERY_SECRET generated automatically.\n')
 
   // Gmail setup
   let googleClientId = ''
@@ -188,13 +212,37 @@ async function main(): Promise<void> {
     microsoftClientSecret = secret
   }
 
+  // App URL
+  console.log('\n─── App Configuration ' + '─'.repeat(19))
+  const appUrlRaw = await prompt(rl, 'App URL (blank = http://localhost:3001): ')
+  const appUrl = appUrlRaw.trim() || 'http://localhost:3001'
+
+  // SMTP setup (optional)
+  console.log('\n─── Email Configuration (Optional) ' + '─'.repeat(9))
+  const smtpAnswer = await prompt(rl, 'Configure SMTP for password reset emails? (y/N): ')
+  let smtpHost = '', smtpPort = '587', smtpUser = '', smtpPass = ''
+  if (smtpAnswer.toLowerCase() === 'y') {
+    smtpHost = await prompt(rl, 'SMTP host: ')
+    const smtpPortRaw = await prompt(rl, 'SMTP port (blank = 587): ')
+    smtpPort = smtpPortRaw.trim() || '587'
+    smtpUser = await prompt(rl, 'SMTP user: ')
+    smtpPass = await prompt(rl, 'SMTP password: ')
+  }
+
   // Write .env
   const content = buildEnvContent({
     encryptionKey,
+    sessionSecret,
+    recoverySecret,
+    appUrl,
     googleClientId,
     googleClientSecret,
     microsoftClientId,
     microsoftClientSecret,
+    smtpHost,
+    smtpPort,
+    smtpUser,
+    smtpPass,
   })
 
   fs.writeFileSync(envPath, content, 'utf-8')
