@@ -147,18 +147,6 @@ InboxMY Plan 4 adds full user authentication and per-user data isolation.
 
 Run `npm run setup` from `inboxmy-backend/` to regenerate all secrets and configure SMTP.
 
-### Manual test checklist
-
-1. `http://localhost:3001` → redirects to `/auth`
-2. Sign up → redirects to dashboard, HttpOnly `session` cookie set
-3. Refresh → still logged in
-4. Sign Out → redirected to `/auth`, back button blocked
-5. Sign in again → dashboard loads
-6. Sign in with wrong password → "Invalid email or password"
-7. Open incognito, sign up as a different user, connect a Gmail account → original user's accounts panel does not show the new account
-8. Forgot password → check server console for reset link → click link → new password works, old password rejected
-9. After password reset, existing sessions are invalidated (sign in required)
-
 ---
 
 ## Step 4 — Connect a Gmail Account
@@ -238,7 +226,7 @@ Once emails are synced, here is how each part of the dashboard works:
 
 ## Running the Tests
 
-The test suite covers all backend logic — encryption, bill parsers, and API routes. The tests do **not** require a real Gmail or Outlook account.
+The test suite covers all backend logic — encryption, bill parsers, API routes, and auth. The tests do **not** require a real Gmail or Outlook account.
 
 ```powershell
 cd C:\Users\bryan.GOAT\Downloads\VibeCode\inboxmy-backend
@@ -255,12 +243,14 @@ Expected output:
 ```
  RUN  v4.x.x
 
- Test Files  9 passed (9)
-       Tests  51 passed (51)
-    Duration  ~2s
+ Test Files  12 passed (12)
+       Tests  71 passed (71)
+    Duration  ~3s
 ```
 
-**What each test file covers:**
+---
+
+### Plan 1 — Backend Core tests
 
 | Test file | What it tests |
 |---|---|
@@ -271,8 +261,72 @@ Expected output:
 | `tests/parsers/generic-bill.test.ts` | Generic Malaysian RM amount and date parsing |
 | `tests/parsers/remaining.test.ts` | Unifi, Celcom/Maxis, Touch 'n Go, Lazada parser coverage |
 | `tests/routes/accounts.test.ts` | GET /api/accounts, PATCH label, DELETE account |
+
+---
+
+### Plan 2 — Frontend Wiring tests
+
+Plan 2 is all frontend (vanilla JS). There are no automated tests — use the manual checklist below:
+
+1. Start the server (`npm start`) and open `http://localhost:3001`
+2. Dashboard loads without console errors
+3. Email list panel shows placeholder state when no accounts are connected
+4. Accounts sidebar renders "No accounts connected" when empty
+5. Bills panel renders "No bills found" when empty
+6. Click **↻ Sync** — button shows "↻ Syncing…" and then "Sync complete!" toast appears
+7. Connect a Gmail or Outlook account — account appears in the sidebar
+8. After sync completes, emails appear in the list with sender, subject, and date
+9. Click an email row — detail pane renders subject, sender, body
+10. Infinite scroll: scroll to bottom of email list — next 50 emails load
+11. Category tabs (`All`, `Unread`, `Bills`, `Govt`, `Receipts`) filter the list
+12. Search bar filters by sender name as you type
+
+---
+
+### Plan 3 — OAuth Credentials Setup tests
+
+| Test file | What it tests |
+|---|---|
 | `tests/config.test.ts` | validateConfig() checklist output — Gmail/Outlook [✓]/[ ] states |
 | `tests/setup.test.ts` | isValidGoogleClientId, isValidAzureClientId, isValidSecret, buildEnvContent |
+
+To run just Plan 3 tests:
+```powershell
+$env:ENCRYPTION_KEY="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+$env:DATA_DIR="./data-test"
+npx vitest run tests/config.test.ts tests/setup.test.ts
+```
+
+---
+
+### Plan 4 — Multi-User Architecture tests
+
+| Test file | What it tests |
+|---|---|
+| `tests/routes/auth.test.ts` | POST /auth/signup, POST /auth/login, GET /auth/me, POST /auth/logout |
+| `tests/routes/auth-reset.test.ts` | POST /auth/forgot-password (email enumeration safe), POST /auth/reset-password — expired/used token rejection |
+| `tests/middleware/auth.test.ts` | requireAuth — valid session passes, no cookie returns 401, fake session returns 401, session older than 30 days returns 401 |
+
+To run just Plan 4 tests:
+```powershell
+$env:ENCRYPTION_KEY="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+$env:DATA_DIR="./data-test"
+npx vitest run tests/routes/auth.test.ts tests/routes/auth-reset.test.ts tests/middleware/auth.test.ts
+```
+
+Manual test checklist for Plan 4 (requires running server):
+
+1. `http://localhost:3001` → redirects to `/auth`
+2. Sign up → redirected to dashboard, HttpOnly `session` cookie set
+3. Refresh → still logged in
+4. Sign Out → redirected to `/auth`, back button blocked
+5. Sign in again → dashboard loads
+6. Sign in with wrong password → "Invalid email or password"
+7. Open incognito, sign up as a different user, connect a Gmail account → original user's accounts panel does not show the new account
+8. Forgot password → check server console for reset link → click link → new password works, old password rejected
+9. After password reset, existing sessions are invalidated
+
+---
 
 To run a single test file:
 ```powershell
@@ -373,6 +427,174 @@ The current version is a single-user local app. **Plan 4** adds multi-user archi
 
 ---
 
+## Testing Bill Detection
+
+Use these templates to populate InboxMY with realistic test data — no real utility accounts needed. Send from a **second Gmail account** to the account connected in InboxMY, then click **↻ Sync**.
+
+### How the parsers match
+
+| Parser | Triggers on |
+|---|---|
+| TNB | Sender `@tnb.com.my` **or** subject contains `TNB` + bill word |
+| Unifi | Sender `@unifi.com.my` **or** subject contains `Unifi` + bill word |
+| Maxis / Celcom / Digi | Sender `@maxis/celcom/digi.com.my` **or** subject contains brand + bill word |
+| Touch 'n Go | Sender `@tngdigital.com.my` **or** subject contains `TNG` / `Touch n Go` |
+| Shopee | Sender `@shopee.com.my` **or** subject contains `Shopee` + order word |
+| Lazada | Sender `@lazada.com.my` **or** subject contains `Lazada` + order word |
+| LHDN | Sender `@hasil.gov.my` **or** subject contains `LHDN` / `e-Filing` / `cukai` |
+| Generic bill | Any sender — body must contain an RM amount **plus** explicit payment language (`due date`, `please pay`, `invoice`, `amount due`, etc.) |
+
+Because subject-based matching is supported, you can send all tests from any Gmail address.
+
+---
+
+### Test 1 — Generic Bill *(any sender, always works)*
+
+**Subject:** `Invoice #INV-2026-001 — Amount Due`
+
+```
+Dear Customer,
+
+Invoice No:  INV-2026-001
+Account No:  9876543210
+Amount Due:  RM 234.50
+Due Date:    28 Feb 2026
+
+Please pay before the due date to avoid service interruption.
+```
+
+✅ Bills category · Smart card: RM 234.50 · Due 28 Feb 2026 · Biller: Unknown
+
+---
+
+### Test 2 — TNB Electricity Bill
+
+**Subject:** `TNB eBil - Invoice Elektrik Bil`
+
+```
+Akaun No: 1122334455
+Jumlah Bil (Amount Due): RM 178.20
+Tarikh Akhir Bayaran (Due Date): 15 Mar 2026
+
+Sila bayar sebelum tarikh akhir / Please pay before due date.
+```
+
+✅ Bills category · Smart card: RM 178.20 · Due 15 Mar 2026 · Biller: TNB
+
+---
+
+### Test 3 — Unifi Monthly Bill
+
+**Subject:** `Unifi Monthly Bill Invoice — March 2026`
+
+```
+Account No: 901234567
+Amount Due: RM 129.00
+Due Date: 20 Mar 2026
+
+Please pay your Unifi bill before the due date.
+```
+
+✅ Bills category · Biller: Unifi
+
+---
+
+### Test 4 — Maxis Postpaid Bill
+
+**Subject:** `Maxis Bill Invoice Statement — March 2026`
+
+```
+Account: 0123456789
+Bill Amount: RM 88.00
+Payment Due Date: 18 Mar 2026
+
+Please pay before the due date to continue your service.
+```
+
+✅ Bills category · Biller: Maxis
+
+---
+
+### Test 5 — Touch 'n Go eWallet
+
+**Subject:** `Touch n Go TNG Monthly Statement`
+
+```
+Your Touch n Go eWallet account summary.
+Total transaction amount: RM 56.80
+```
+
+✅ Bills category · Biller: TnG
+
+---
+
+### Test 6 — Shopee Order Confirmation
+
+**Subject:** `Shopee Order Confirmed — Pesanan Anda Telah Disahkan`
+
+```
+Order No: 240115ABC123XYZ789
+Total amount paid: RM 45.90
+Thank you for shopping with Shopee!
+```
+
+✅ Receipts category · Biller: Shopee · Appears in Recent orders panel
+
+---
+
+### Test 7 — Lazada Order
+
+**Subject:** `Lazada Order Placed Successfully`
+
+```
+Order ID: 987654321
+Your order has been placed.
+Total: RM 132.00
+Thank you for shopping with Lazada!
+```
+
+✅ Receipts category · Biller: Lazada · Appears in Recent orders panel
+
+---
+
+### Test 8 — LHDN Government Notice
+
+**Subject:** `LHDN e-Filing Pemberitahuan Cukai Pendapatan 2025`
+
+```
+Pemberitahuan daripada Lembaga Hasil Dalam Negeri Malaysia.
+Sila semak status e-Filing anda.
+```
+
+✅ Government category · No bill amount (LHDN parser is detection-only by design)
+
+---
+
+### Test 9 — False positive check *(should NOT become a bill)*
+
+**Subject:** `Flash Sale! Up to 50% off — Shop Now`
+
+```
+Don't miss our biggest sale! RM 29.90 only!
+Limited time offer. Shop now and save big!
+```
+
+✅ Should land in **Promotions** folder · Must NOT appear in Bills due soon panel
+
+---
+
+### After syncing — what to verify
+
+| Check | Where |
+|---|---|
+| Email appears in Bills / Receipts / Govt tab | Sidebar |
+| Smart card shows correct amount + due date | Email detail pane |
+| Bill appears in "Bills due soon" panel | Right panel |
+| Promotions email is absent from Bills panel | Right panel |
+| Re-sync from scratch resets everything | Profile → Settings → Re-sync |
+
+---
+
 ## Roadmap
 
 | # | Plan | Key Deliverables | Status |
@@ -401,13 +623,20 @@ Touch 'n Go, LHDN, MySejahtera, Shopee, Lazada), and stores everything AES-256-G
 SQLite database. Nothing is sent to any cloud.
 
 Completed so far:
-- Plan 1 (Backend): 100% complete, 32 tests passing, running at http://localhost:3001
+- Plan 1 (Backend): 100% complete — encrypted SQLite, OAuth flows (Gmail + Outlook), sync engine,
+  Malaysian bill parsers (TNB, Unifi, Maxis, TnG, LHDN, Shopee, Lazada), REST API. 7 test files.
 - Plan 2 (Frontend Wiring): 100% complete — frontend/app.js wires all dashboard panels to the live API
-- Plan 3 (OAuth Credentials Setup): 100% complete — npm run setup wizard, startup config checklist,
-  SETUP.md guide, README roadmap remodel
+  (email list, detail, accounts sidebar, bills panel, sync button, infinite scroll, error handling).
+- Plan 3 (OAuth Credentials Setup): 100% complete — npm run setup wizard, startup config validator with
+  checklist, SETUP.md full reference guide, README roadmap remodel. 2 test files.
+- Plan 4 (Multi-User Architecture): 100% complete — user sign-up/sign-in (email + password), per-user
+  AES-256-GCM encrypted data keys, HTTP-only cookie sessions (30-day absolute TTL), forgot-password +
+  reset-password with key re-wrap, requireAuth middleware on all API routes, OAuth state relay,
+  frontend auth.html login/signup page, sign-out button. 3 test files. 71 tests total passing.
 
-Today's goal is Plan 4: Multi-User Architecture.
-Add user sign-up/sign-in, per-user data isolation, per-user encryption keys, and session management —
-the foundation for both hosted and local-download modes. See docs/superpowers/specs/ for the design spec
-once it is written.
+Today's goal is Plan 5: Account Management UI.
+Add rename, delete + revoke, re-auth for expired tokens, and per-account sync status to the accounts panel.
+The backend PATCH /api/accounts/:id/label and DELETE /api/accounts/:id routes already exist — Plan 5 wires
+them into the frontend with proper UI (inline rename, confirm-delete modal, sync status badge).
+See docs/superpowers/specs/ for the design spec once it is written.
 ```

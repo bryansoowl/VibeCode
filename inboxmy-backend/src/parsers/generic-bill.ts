@@ -20,6 +20,15 @@ const ACCOUNT_PATTERNS = [
   /(?:customer|pelanggan)\s*(?:id|no)?\s*[:\#]?\s*(\d{6,14})/i,
 ]
 
+// Strong indicators that an email is an actual bill or payment notice
+const BILL_KEYWORDS = /\b(due date|payment due|amount due|bayaran perlu|tarikh bayaran|tarikh akhir bayaran|sila bayar|please pay|pay by|bill amount|jumlah bil|baki tertunggak|outstanding balance|minimum payment|invois|invoice no|statement of account|penyata akaun|overdue|tertunggak|debit note|notice of payment|notis bayaran)\b/i
+
+// Subject-line patterns that strongly suggest a bill notice
+const BILL_SUBJECTS = /\b(invoice|invois|bill|bil|statement|penyata|payment (due|notice|reminder)|notis bayaran|e-bill|ebill|resit rasmi|official receipt)\b/i
+
+// Patterns that indicate the email is promotional — exclude these even if RM amounts exist
+const PROMO_EXCLUSIONS = /\b(% off|sale|promo|promotion|discount|clearance|voucher|coupon|flash sale|limited time|shop now|buy now|free (delivery|shipping)|new arrival|today only|special (offer|price)|member exclusive|rewards|rebate|cashback|win|lucky draw)\b/i
+
 export function extractRmAmount(text: string): number | null {
   const plain = text.replace(/<[^>]*>/g, ' ')
   const match = plain.match(RM_PATTERN)
@@ -64,13 +73,24 @@ export function extractAccountRef(text: string): string | null {
 export const genericBillParser: Parser = {
   name: 'Generic',
   matches(email: NormalizedEmail): boolean {
-    const body = email.bodyText ?? email.bodyHtml ?? ''
-    return RM_PATTERN.test(body)
+    const subject = email.subject ?? ''
+    const body = (email.bodyText ?? email.bodyHtml ?? '').replace(/<[^>]*>/g, ' ')
+    const fullText = subject + ' ' + body
+
+    // Must have an RM amount
+    if (!RM_PATTERN.test(body)) return false
+
+    // Skip obvious promotional emails
+    if (PROMO_EXCLUSIONS.test(subject)) return false
+
+    // Must look like a bill: either the subject matches bill patterns,
+    // or the body contains explicit payment/bill language
+    return BILL_SUBJECTS.test(subject) || BILL_KEYWORDS.test(fullText)
   },
   parse(email: NormalizedEmail): ParseResult {
     const body = email.bodyText ?? email.bodyHtml ?? ''
     return {
-      category: null,
+      category: 'bill',
       bill: {
         biller: 'Unknown',
         amountRm: extractRmAmount(body),

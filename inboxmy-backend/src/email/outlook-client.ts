@@ -36,6 +36,9 @@ function normalizeGraphMessage(accountId: string, msg: any): NormalizedEmail {
     senderName: from?.name ?? null,
     receivedAt: new Date(msg.receivedDateTime).getTime(),
     isRead: msg.isRead,
+    folder: 'inbox',
+    tab: 'primary',  // Outlook has no CATEGORY_* equivalent; Focused/Other not yet mapped
+    isImportant: msg.importance === 'high',
     category: null,
     bodyHtml: msg.body?.contentType === 'html' ? msg.body.content : null,
     bodyText: msg.body?.contentType === 'text' ? msg.body.content : null,

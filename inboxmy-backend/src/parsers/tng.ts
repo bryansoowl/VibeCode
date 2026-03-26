@@ -5,7 +5,9 @@ import { extractRmAmount } from './generic-bill'
 
 export const tngParser: Parser = {
   name: 'Touch n Go',
-  matches: (e) => /@tngdigital\.com\.my|touchngo\.com\.my/i.test(e.sender),
+  matches: (e) =>
+    /@tngdigital\.com\.my|touchngo\.com\.my/i.test(e.sender) ||
+    /touch.?n.?go|tng digital|\btng\b/i.test(e.subject),
   parse: (e) => {
     const body = e.bodyText ?? e.bodyHtml ?? ''
     return { category: 'bill', bill: { biller: 'TnG', amountRm: extractRmAmount(body), dueDateMs: null, accountRef: null } }

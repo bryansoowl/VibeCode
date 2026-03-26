@@ -20,6 +20,7 @@ export async function fetchNewEmails(
     userId: 'me',
     q: query,
     maxResults: FETCH_LIMIT,
+    includeSpamTrash: true,  // fetch SPAM and TRASH so we can correctly tag folder
   })
 
   const messages = list.data.messages ?? []
@@ -38,12 +39,32 @@ export async function fetchNewEmails(
   return emails
 }
 
+function gmailFolder(labelIds: string[]): import('./types').EmailFolder {
+  if (labelIds.includes('DRAFT')) return 'draft'
+  if (labelIds.includes('TRASH')) return 'trash'
+  if (labelIds.includes('SPAM'))  return 'spam'
+  if (labelIds.includes('SENT'))  return 'sent'
+  return 'inbox'
+}
+
+// Maps Gmail's CATEGORY_* labels to InboxMY tabs.
+// Note: SPAM emails do NOT carry CATEGORY_PROMOTIONS — they are mutually exclusive.
+// A message can have both INBOX and a CATEGORY_* label simultaneously.
+function gmailTab(labelIds: string[]): import('./types').EmailTab {
+  if (labelIds.includes('CATEGORY_PROMOTIONS')) return 'promotions'
+  if (labelIds.includes('CATEGORY_SOCIAL'))     return 'social'
+  if (labelIds.includes('CATEGORY_UPDATES'))    return 'updates'
+  if (labelIds.includes('CATEGORY_FORUMS'))     return 'forums'
+  return 'primary'
+}
+
 function normalizeGmailMessage(accountId: string, msg: any): NormalizedEmail {
   const headers: Record<string, string> = {}
   for (const h of msg.payload?.headers ?? []) {
     headers[h.name.toLowerCase()] = h.value
   }
 
+  const labelIds: string[] = msg.labelIds ?? []
   const from = headers['from'] ?? ''
   const senderMatch = from.match(/^(.+?)\s*<([^>]+)>$/)
   const senderEmail = senderMatch ? senderMatch[2] : from
@@ -59,7 +80,10 @@ function normalizeGmailMessage(accountId: string, msg: any): NormalizedEmail {
     sender: senderEmail.toLowerCase(),
     senderName,
     receivedAt: parseInt(msg.internalDate ?? '0'),
-    isRead: !(msg.labelIds ?? []).includes('UNREAD'),
+    isRead: !labelIds.includes('UNREAD'),
+    folder: gmailFolder(labelIds),
+    tab: gmailTab(labelIds),
+    isImportant: labelIds.includes('IMPORTANT'),
     category: null,  // set by parser
     bodyHtml: htmlBody,
     bodyText: textBody,

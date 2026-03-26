@@ -62,6 +62,17 @@ const MIGRATIONS: string[] = [
   ALTER TABLE accounts ADD COLUMN user_id TEXT REFERENCES users(id) ON DELETE CASCADE;
   CREATE INDEX IF NOT EXISTS idx_accounts_user ON accounts(user_id);
   `,
+  // Migration 3: per-email folder and importance flag
+  `
+  ALTER TABLE emails ADD COLUMN folder TEXT NOT NULL DEFAULT 'inbox';
+  ALTER TABLE emails ADD COLUMN is_important INTEGER NOT NULL DEFAULT 0;
+  CREATE INDEX IF NOT EXISTS idx_emails_folder ON emails(folder);
+  `,
+  // Migration 4: Gmail inbox tab (primary / promotions / social / updates / forums)
+  `
+  ALTER TABLE emails ADD COLUMN tab TEXT NOT NULL DEFAULT 'primary';
+  CREATE INDEX IF NOT EXISTS idx_emails_tab ON emails(tab);
+  `,
 ]
 
 export function runMigrations(db: Database.Database): void {

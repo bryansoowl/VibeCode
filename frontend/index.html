@@ -52,6 +52,7 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 .sb-icon{width:18px;text-align:center;font-size:14px;flex-shrink:0}
 .sb-badge{margin-left:auto;background:var(--coral);color:#fff;border-radius:999px;font-size:10px;font-weight:700;padding:1px 7px;min-width:20px;text-align:center}
 .sb-badge.grey{background:var(--cream3);color:var(--ink3)}
+.sb-badge:empty{display:none}
 .sb-sep{height:1px;background:var(--border2);margin:6px 12px}
 
 /* ACCOUNTS in sidebar */
@@ -72,15 +73,15 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 .el-filter{padding:4px 11px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid transparent;white-space:nowrap;transition:all .15s;color:var(--ink3);background:transparent}
 .el-filter.active{background:#fff;color:var(--ink);border-color:var(--border);box-shadow:0 1px 3px rgba(26,22,18,.06)}
 .el-filter:hover:not(.active){background:var(--cream3)}
-.el-items{flex:1;overflow-y:auto}
+.el-items{flex:1;overflow-y:auto;scrollbar-gutter:stable}
 .el-items::-webkit-scrollbar{width:3px}
 .el-items::-webkit-scrollbar-thumb{background:var(--cream3)}
-.email-row{display:grid;grid-template-columns:36px 1fr auto;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border2);cursor:pointer;transition:background .1s;align-items:start}
+.email-row{display:grid;grid-template-columns:36px 1fr auto;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border2);cursor:pointer;transition:background .1s;align-items:start;border-left:3px solid transparent}
 .email-row:hover{background:var(--cream2)}
 .email-row.selected{background:#fff;border-left:3px solid var(--coral)}
 .email-row.unread .er-from{font-weight:700}
 .email-row.unread .er-subject{font-weight:600;color:var(--ink)}
-.er-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0}
+.er-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;box-sizing:border-box}
 .er-body{min-width:0}
 .er-from{font-size:13px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
 .er-subject{font-size:12px;color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
@@ -96,12 +97,31 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 .tag-promo{background:var(--cream3);color:var(--ink3)}
 .er-unread-dot{width:7px;height:7px;border-radius:50%;background:var(--coral)}
 
+/* PROFILE DROPDOWN */
+.profile-wrap{position:relative}
+.tb-avatar{width:30px;height:30px;border-radius:50%;background:var(--coral);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;user-select:none}
+.profile-dropdown{display:none;position:absolute;top:38px;right:0;min-width:210px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 24px rgba(26,22,18,.12);z-index:600;overflow:hidden}
+.profile-dropdown.open{display:block}
+.pd-user{padding:12px 14px 10px;border-bottom:1px solid var(--border2)}
+.pd-user-name{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:1px}
+.pd-user-email{font-size:11px;color:var(--ink4);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pd-item{display:flex;align-items:center;gap:9px;padding:9px 14px;font-size:13px;color:var(--ink2);cursor:pointer;transition:background .1s}
+.pd-item:hover{background:var(--cream2)}
+.pd-item.muted{color:var(--ink4);cursor:default}
+.pd-item.muted:hover{background:transparent}
+.pd-item.danger{color:var(--coral)}
+.pd-sep{height:1px;background:var(--border2);margin:2px 0}
+
+/* BILL PAY BUTTON */
+.bi-pay-btn{padding:2px 8px;border-radius:5px;border:1px solid rgba(26,138,60,.25);background:var(--green-bg);color:var(--green);font-size:10px;font-weight:700;cursor:pointer;font-family:var(--sans);transition:all .15s;white-space:nowrap}
+.bi-pay-btn:hover{background:var(--green);color:#fff;border-color:var(--green)}
+
 /* EMAIL DETAIL */
 #email-detail{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#fff}
 .ed-header{padding:20px 28px 16px;border-bottom:1px solid var(--border);flex-shrink:0}
 .ed-subject{font-family:var(--serif);font-size:22px;font-weight:400;color:var(--ink);margin-bottom:12px;line-height:1.3}
 .ed-meta-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.ed-from-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0}
+.ed-from-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;box-sizing:border-box}
 .ed-from-info{flex:1}
 .ed-from-name{font-size:13px;font-weight:600;color:var(--ink)}
 .ed-from-email{font-size:12px;color:var(--ink4)}
@@ -129,9 +149,10 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 .sc-val.teal{color:var(--teal)}
 .sc-val.amber{color:var(--amber)}
 
-.ed-body{flex:1;overflow-y:auto;padding:24px 28px}
+.ed-body{flex:1;overflow-y:auto;overflow-x:hidden;padding:24px 28px;scrollbar-gutter:stable}
 .ed-body::-webkit-scrollbar{width:4px}
 .ed-body::-webkit-scrollbar-thumb{background:var(--cream3)}
+.ed-body iframe{width:100%;border:none;display:block}
 .email-content{font-size:14px;color:var(--ink2);line-height:1.75;max-width:640px}
 .email-content p{margin-bottom:14px}
 .email-content .highlight{background:var(--amber-bg);padding:2px 6px;border-radius:4px;font-weight:600;color:var(--amber)}
@@ -184,15 +205,60 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--ink);color:#fff;padding:11px 20px;border-radius:9px;font-size:13px;font-weight:500;opacity:0;transition:transform .3s,opacity .3s;z-index:300;pointer-events:none}
 #toast.show{transform:translateX(-50%) translateY(0);opacity:1}
 
+/* PROGRESS OVERLAY */
+#progress-overlay{display:none;position:fixed;inset:0;background:rgba(26,22,18,.5);z-index:800;align-items:center;justify-content:center}
+#progress-overlay.show{display:flex}
+.progress-card{background:#fff;border-radius:14px;padding:28px 36px;text-align:center;box-shadow:0 16px 64px rgba(26,22,18,.18);min-width:240px}
+.progress-spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--coral);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.progress-msg{font-size:14px;font-weight:600;color:var(--ink);margin-bottom:4px}
+.progress-sub{font-size:12px;color:var(--ink4)}
+
 /* EMPTY / PLACEHOLDER */
 .ed-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--ink4);gap:10px}
 .ed-empty-icon{font-size:48px;opacity:.3}
 .ed-empty-text{font-family:var(--serif);font-size:18px;font-weight:400;font-style:italic}
+
+/* MODAL OVERLAY (shared by settings + confirm) */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(26,22,18,.45);z-index:700;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal-box{background:#fff;border-radius:14px;width:480px;max-width:calc(100vw - 32px);max-height:calc(100vh - 64px);overflow-y:auto;box-shadow:0 16px 64px rgba(26,22,18,.18)}
+.modal-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}
+.modal-title{font-family:var(--serif);font-size:18px;font-weight:600;color:var(--ink)}
+.modal-close{background:none;border:none;font-size:20px;color:var(--ink4);cursor:pointer;line-height:1;padding:2px}
+.modal-close:hover{color:var(--ink)}
+.modal-body{padding:20px}
+.modal-section-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--ink4);margin-bottom:10px}
+.modal-acct-card{background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;gap:10px}
+.mac-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.mac-info{flex:1;min-width:0}
+.mac-email{font-size:13px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mac-sync{font-size:11px;color:var(--ink4);margin-top:1px}
+.mac-btn{padding:5px 11px;border-radius:7px;border:1px solid var(--border);background:#fff;font-family:var(--sans);font-size:12px;font-weight:600;color:var(--ink2);cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0}
+.mac-btn:hover{background:var(--cream2)}
+.danger-zone{border:1px solid rgba(232,64,42,.25);border-radius:10px;padding:16px;margin-top:20px;background:var(--coral-bg)}
+.dz-title{font-size:12px;font-weight:700;color:var(--coral);margin-bottom:4px}
+.dz-desc{font-size:12px;color:var(--ink3);line-height:1.6;margin-bottom:12px}
+.dz-btn{padding:8px 16px;border-radius:8px;background:var(--coral);color:#fff;border:none;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;transition:background .15s;width:100%}
+.dz-btn:hover{background:var(--coral2)}
+.dz-btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* CONFIRM MODAL */
+.confirm-warning{display:flex;gap:10px;background:#fef3f2;border:1px solid rgba(232,64,42,.2);border-radius:8px;padding:12px 14px;margin-bottom:16px}
+.confirm-warning-icon{font-size:18px;flex-shrink:0;margin-top:1px}
+.confirm-warning-text{font-size:13px;color:var(--ink2);line-height:1.6}
+.confirm-type-label{font-size:12px;font-weight:600;color:var(--ink2);margin-bottom:6px}
+.confirm-input{width:100%;padding:9px 12px;border-radius:7px;border:1px solid var(--border);font-family:var(--sans);font-size:13px;color:var(--ink);outline:none;transition:border-color .15s}
+.confirm-input:focus{border-color:var(--coral)}
+.confirm-actions{display:flex;gap:8px;margin-top:16px}
+.confirm-cancel{flex:1;padding:9px;border-radius:8px;border:1px solid var(--border);background:#fff;font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink2);cursor:pointer}
+.confirm-cancel:hover{background:var(--cream2)}
+.confirm-delete{flex:1;padding:9px;border-radius:8px;border:none;background:var(--coral);color:#fff;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;transition:background .15s}
+.confirm-delete:hover:not(:disabled){background:var(--coral2)}
+.confirm-delete:disabled{opacity:.45;cursor:not-allowed}
 </style>
 </head>
 <body>
-<button id="signOutBtn" onclick="handleSignOut()" style="position:fixed;top:12px;right:16px;background:#e53e3e;color:#fff;border:none;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.85rem;z-index:999;">Sign Out</button>
-
 <!-- TOPBAR -->
 <div id="topbar">
   <div class="tb-logo"><div class="tb-dot"></div>InboxMY</div>
@@ -205,7 +271,18 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
     <span id="sync-status" style="font-size:11px;color:var(--ink4)"></span>
     <button class="tb-lang active" id="lang-en" onclick="setLang('en')">EN</button>
     <button class="tb-lang" id="lang-bm" onclick="setLang('bm')">BM</button>
-    <div class="tb-avatar" title="Amirul Hakim">A</div>
+    <div class="profile-wrap">
+      <div class="tb-avatar" id="tb-avatar" onclick="toggleProfileMenu()" title="Account">A</div>
+      <div class="profile-dropdown" id="profile-dropdown">
+        <div class="pd-user">
+          <div class="pd-user-name" id="pd-user-name">Account</div>
+          <div class="pd-user-email" id="pd-user-email">—</div>
+        </div>
+        <div class="pd-item" onclick="openSettings()">⚙️ Settings</div>
+        <div class="pd-sep"></div>
+        <div class="pd-item danger" onclick="handleSignOut()">↩ Sign out</div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -218,37 +295,58 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
     <div class="sb-section">
       <div class="sb-item active" onclick="setFolder('inbox', this)" id="folder-inbox">
         <span class="sb-icon">📥</span>
-        <span id="lbl-inbox">All inbox</span>
-        <span class="sb-badge" id="badge-inbox">12</span>
+        <span id="lbl-inbox">Inbox</span>
+        <span class="sb-badge" id="badge-inbox"></span>
+      </div>
+      <div class="sb-item" onclick="setFolder('allmail', this)" id="folder-allmail">
+        <span class="sb-icon">📬</span>
+        <span>All Mail</span>
+        <span class="sb-badge grey" id="badge-allmail"></span>
       </div>
       <div class="sb-item" onclick="setFolder('bills', this)" id="folder-bills">
         <span class="sb-icon">⚡</span>
         <span id="lbl-bills">Bills</span>
-        <span class="sb-badge" style="background:var(--amber);color:#fff" id="badge-bills">3</span>
+        <span class="sb-badge" style="background:var(--amber);color:#fff" id="badge-bills"></span>
       </div>
       <div class="sb-item" onclick="setFolder('govt', this)" id="folder-govt">
         <span class="sb-icon">🏛️</span>
         <span id="lbl-govt">Government</span>
-        <span class="sb-badge" style="background:var(--teal);color:#fff">1</span>
+        <span class="sb-badge" style="background:var(--teal);color:#fff" id="badge-govt"></span>
       </div>
       <div class="sb-item" onclick="setFolder('receipts', this)" id="folder-receipts">
         <span class="sb-icon">🛍️</span>
         <span id="lbl-receipts">Receipts</span>
-        <span class="sb-badge grey">4</span>
+        <span class="sb-badge grey" id="badge-receipts"></span>
       </div>
       <div class="sb-item" onclick="setFolder('work', this)" id="folder-work">
         <span class="sb-icon">💼</span>
         <span id="lbl-work">Work</span>
-        <span class="sb-badge" id="badge-work">4</span>
+        <span class="sb-badge" id="badge-work"></span>
       </div>
-      <div class="sb-item" onclick="setFolder('sent', this)">
+      <div class="sb-item" onclick="setFolder('important', this)" id="folder-important">
+        <span class="sb-icon">⭐</span>
+        <span id="lbl-important">Important</span>
+        <span class="sb-badge" style="background:var(--amber);color:#fff" id="badge-important"></span>
+      </div>
+      <div class="sb-item" onclick="setFolder('promotions', this)" id="folder-promotions">
+        <span class="sb-icon">🏷️</span>
+        <span>Promotions</span>
+        <span class="sb-badge" style="background:var(--purple);color:#fff" id="badge-promotions"></span>
+      </div>
+      <div class="sb-item" onclick="setFolder('sent', this)" id="folder-sent">
         <span class="sb-icon">📤</span>
         <span id="lbl-sent">Sent</span>
+        <span class="sb-badge grey" id="badge-sent"></span>
       </div>
-      <div class="sb-item" onclick="setFolder('spam', this)">
+      <div class="sb-item" onclick="setFolder('draft', this)" id="folder-draft">
+        <span class="sb-icon">📝</span>
+        <span>Drafts</span>
+        <span class="sb-badge grey" id="badge-draft"></span>
+      </div>
+      <div class="sb-item" onclick="setFolder('spam', this)" id="folder-spam">
         <span class="sb-icon">🚫</span>
         <span id="lbl-spam">Spam</span>
-        <span class="sb-badge grey">8</span>
+        <span class="sb-badge grey" id="badge-spam"></span>
       </div>
     </div>
 
@@ -373,7 +471,62 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
   </div>
 </div>
 
+<!-- SETTINGS MODAL -->
+<div class="modal-overlay" id="settings-modal" onclick="if(event.target===this)closeSettings()">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div class="modal-title">Settings</div>
+      <button class="modal-close" onclick="closeSettings()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-section-label">Connected accounts</div>
+      <div id="settings-accounts-list"><div style="color:var(--ink4);font-size:13px">Loading…</div></div>
+
+      <div class="danger-zone" style="margin-top:24px">
+        <div class="dz-title">⚠️ Danger zone</div>
+        <div class="dz-desc">
+          Wipe <strong>all synced email data</strong> from this device — every email and bill across all accounts.
+          Your actual email accounts are not affected. The next sync will re-fetch everything.
+        </div>
+        <button class="dz-btn" onclick="confirmWipeAll()">Delete all email data…</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM DELETE MODAL -->
+<div class="modal-overlay" id="confirm-modal" onclick="if(event.target===this)closeConfirm()">
+  <div class="modal-box" style="width:400px">
+    <div class="modal-head">
+      <div class="modal-title">Are you sure?</div>
+      <button class="modal-close" onclick="closeConfirm()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="confirm-warning">
+        <div class="confirm-warning-icon">⚠️</div>
+        <div class="confirm-warning-text" id="confirm-message">This action cannot be undone.</div>
+      </div>
+      <div class="confirm-type-label">Type <strong>DELETE</strong> to confirm</div>
+      <input class="confirm-input" id="confirm-input" type="text" placeholder="DELETE"
+             oninput="document.getElementById('confirm-submit').disabled=this.value!=='DELETE'">
+      <div class="confirm-actions">
+        <button class="confirm-cancel" onclick="closeConfirm()">Cancel</button>
+        <button class="confirm-delete" id="confirm-submit" disabled onclick="runConfirmedAction()">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
+
+<!-- PROGRESS OVERLAY -->
+<div id="progress-overlay">
+  <div class="progress-card">
+    <div class="progress-spinner"></div>
+    <div class="progress-msg" id="progress-msg">Working…</div>
+    <div class="progress-sub" id="progress-sub">Please wait</div>
+  </div>
+</div>
 
 <script>
 // ── LANG ──────────────────────────────────────────────────────────────────

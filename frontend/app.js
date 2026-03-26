@@ -8,9 +8,12 @@
       return
     }
     const { user } = await res.json()
-    // Display user email if there's a header element for it
-    const emailEl = document.getElementById('userEmail')
-    if (emailEl) emailEl.textContent = user.email
+    const avatar = document.getElementById('tb-avatar')
+    const pdName = document.getElementById('pd-user-name')
+    const pdEmail = document.getElementById('pd-user-email')
+    if (avatar) avatar.textContent = (user.email || 'U').charAt(0).toUpperCase()
+    if (pdEmail) pdEmail.textContent = user.email
+    if (pdName) pdName.textContent = user.email.split('@')[0]
   } catch {
     window.location.href = '/auth'
   }
@@ -20,6 +23,16 @@ async function handleSignOut() {
   await fetch('/auth/logout', { method: 'POST' })
   window.location.href = '/auth'
 }
+
+function toggleProfileMenu() {
+  document.getElementById('profile-dropdown').classList.toggle('open')
+}
+document.addEventListener('click', e => {
+  const wrap = document.querySelector('.profile-wrap')
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('profile-dropdown')?.classList.remove('open')
+  }
+})
 
 // ── CONFIG ──────────────────────────────────────────────────────────────────
 const API = '';  // same-origin: Express serves frontend at localhost:3001
@@ -46,11 +59,15 @@ async function fetchAccounts() {
   return apiFetch('/api/accounts');
 }
 
-async function fetchEmails({ category, accountId, search, limit = 50, offset = 0 } = {}) {
+async function fetchEmails({ category, folder, tab, important, accountId, search, unread, limit = 50, offset = 0 } = {}) {
   const p = new URLSearchParams();
-  if (category) p.set('category', category);
+  if (category)  p.set('category', category);
+  if (folder)    p.set('folder', folder);
+  if (tab)       p.set('tab', tab);
+  if (important) p.set('important', '1');
   if (accountId) p.set('accountId', accountId);
-  if (search) p.set('search', search);
+  if (search)    p.set('search', search);
+  if (unread)    p.set('unread', '1');
   p.set('limit', limit);
   p.set('offset', offset);
   return apiFetch('/api/emails?' + p);
@@ -101,30 +118,30 @@ let emailOffset = 0;
 let emailLoading = false;
 let emailHasMore = true;
 
-const FOLDER_CATEGORY = {
-  inbox: null,
-  bills: 'bill',
-  govt: 'govt',
-  receipts: 'receipt',
-  work: 'work',
-};
-
-const FILTER_CATEGORY = {
-  all: null,
-  unread: null,
-  bills: 'bill',
-  govt: 'govt',
-  receipts: 'receipt',
+// Maps sidebar folder names to API query params.
+// 'inbox'   → folder=inbox (backend auto-excludes promotions)
+// 'allmail' → no params = every email, no filter
+const FOLDER_PARAMS = {
+  inbox:      { folder: 'inbox' },
+  allmail:    {},
+  bills:      { category: 'bill' },
+  govt:       { category: 'govt' },
+  receipts:   { category: 'receipt' },
+  work:       { category: 'work' },
+  important:  { important: '1' },
+  promotions: { tab: 'promotions' },
+  sent:       { folder: 'sent' },
+  draft:      { folder: 'draft' },
+  spam:       { folder: 'spam' },
 };
 
 function buildEmailParams(offset = 0) {
-  const folderCat = FOLDER_CATEGORY[currentFolder] ?? null;
-  const filterCat = FILTER_CATEGORY[currentFilter] ?? null;
-  const category = folderCat || filterCat || undefined;
+  const folderParams = FOLDER_PARAMS[currentFolder] || { folder: 'inbox' };
   return {
-    category,
+    ...folderParams,
     accountId: currentAccountId || undefined,
     search: currentSearch || undefined,
+    unread: currentFilter === 'unread' || undefined,
     limit: 50,
     offset,
   };
@@ -149,6 +166,53 @@ function formatRelativeTime(ms) {
     return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
   }
   return d.toLocaleDateString('en-MY', { day: 'numeric', month: 'short' });
+}
+
+// ── SENDER LOGO ───────────────────────────────────────────────────────────────
+const _logoCache = new Map(); // domain → 'loaded' | 'failed'
+
+function extractSenderDomain(sender) {
+  const m = sender && sender.match(/@([\w.-]+)/);
+  return m ? m[1].toLowerCase() : null;
+}
+
+function tryLoadLogo(avatarEl, domain) {
+  if (!domain) return;
+  if (_logoCache.get(domain) === 'failed') return;
+  if (_logoCache.get(domain) === 'loaded') {
+    // Already know it works — apply immediately from cache
+    _applyLogo(avatarEl, domain);
+    return;
+  }
+
+  // Google's favicon service is reliable and returns a proper icon for known brands
+  const url = 'https://www.google.com/s2/favicons?domain=' + domain + '&sz=64';
+  const img = new Image();
+  img.onload = () => {
+    // Google always returns 200 but may return a 16px grey globe for unknown domains.
+    // Check rendered size — a 16x16 source image means it's the generic fallback.
+    if (img.naturalWidth <= 16 && img.naturalHeight <= 16) {
+      _logoCache.set(domain, 'failed');
+      return;
+    }
+    _logoCache.set(domain, 'loaded');
+    _applyLogo(avatarEl, domain);
+  };
+  img.onerror = () => { _logoCache.set(domain, 'failed'); };
+  img.src = url;
+}
+
+function _applyLogo(avatarEl, domain) {
+  const url = 'https://www.google.com/s2/favicons?domain=' + domain + '&sz=64';
+  avatarEl.style.background = '#fff';
+  avatarEl.style.border = '1px solid rgba(26,22,18,.1)';
+  avatarEl.style.padding = '6px';
+  avatarEl.textContent = '';
+  const img = document.createElement('img');
+  img.src = url;
+  img.style.cssText = 'width:100%;height:100%;object-fit:contain;display:block';
+  img.alt = '';
+  avatarEl.appendChild(img);
 }
 
 function renderEmailRow(email) {
@@ -185,6 +249,9 @@ function renderEmailRow(email) {
       ${isUnread ? '<div class="er-unread-dot"></div>' : ''}
     </div>`;
   row.onclick = () => selectEmail(email.id);
+  // Try to replace letter avatar with sender logo
+  const domain = extractSenderDomain(email.sender);
+  if (domain) tryLoadLogo(row.querySelector('.er-avatar'), domain);
   return row;
 }
 
@@ -204,18 +271,11 @@ async function loadEmails(reset = false) {
     const data = await fetchEmails(buildEmailParams(emailOffset));
     const rawEmails = data.emails || [];
 
-    // Client-side unread filter (API has no unread param).
-    // KNOWN LIMITATION: if a full page arrives but few are unread,
-    // emailHasMore stays true based on raw count — user must scroll to load more.
-    let emails = currentFilter === 'unread'
-      ? rawEmails.filter(e => !e.is_read)
-      : rawEmails;
-
-    emailCache = emailCache.concat(emails);
+    emailCache = emailCache.concat(rawEmails);
     emailOffset += rawEmails.length;
     emailHasMore = rawEmails.length >= data.limit;
 
-    renderList(emails, reset);
+    renderList(rawEmails, reset);
   } catch (err) {
     showApiError(err);
   } finally {
@@ -225,8 +285,9 @@ async function loadEmails(reset = false) {
 
 function renderList(emails, reset = false) {
   const wrap = document.getElementById('el-items');
+  const count = emailCache.length;
   document.getElementById('email-count').textContent =
-    emailCache.length + (emailHasMore ? '+' : '') + ' emails';
+    count + (emailHasMore ? '+' : '') + ' email' + (count !== 1 ? 's' : '');
 
   if (reset && emailCache.length === 0) {
     wrap.innerHTML = '<div style="padding:32px;text-align:center;color:var(--ink4);font-size:13px">No emails found</div>';
@@ -241,7 +302,11 @@ function setFolder(f, el) {
   currentFilter = 'all';
   document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('active'));
   if (el) el.classList.add('active');
-  const titles = { inbox:'All inbox', bills:'Bills', govt:'Government', receipts:'Receipts', work:'Work', sent:'Sent', spam:'Spam' };
+  const titles = {
+    inbox: 'Inbox', allmail: 'All Mail', bills: 'Bills', govt: 'Government',
+    receipts: 'Receipts', work: 'Work', important: 'Important',
+    promotions: 'Promotions', sent: 'Sent', draft: 'Drafts', spam: 'Spam',
+  };
   document.getElementById('folder-title').textContent = titles[f] || f;
   document.querySelectorAll('.el-filter').forEach(i => i.classList.remove('active'));
   document.getElementById('filter-all').classList.add('active');
@@ -326,6 +391,13 @@ async function selectEmail(id) {
       // Update cache
       const cached = emailCache.find(e => e.id === id);
       if (cached) cached.is_read = true;
+      // Decrement inbox unread badge
+      const badge = document.getElementById('badge-inbox');
+      if (badge) {
+        const curr = parseInt(badge.textContent) || 0;
+        if (curr > 1) badge.textContent = String(curr - 1);
+        else badge.textContent = '';
+      }
     }
   } catch (err) {
     document.getElementById('ed-subject').textContent = 'Failed to load email';
@@ -346,8 +418,14 @@ function renderEmailDetail(email) {
   document.getElementById('ed-subject').textContent = email.subject || '(no subject)';
 
   const av = document.getElementById('ed-avatar');
-  av.textContent = initial;
+  // Reset to letter avatar first (in case previous email had a logo applied)
   av.style.background = color;
+  av.style.border = '';
+  av.style.padding = '';
+  av.textContent = initial;
+  // Try to replace with sender logo
+  const domain = extractSenderDomain(email.sender);
+  if (domain) tryLoadLogo(av, domain);
 
   document.getElementById('ed-from-name').textContent = name;
   document.getElementById('ed-from-email').textContent = email.sender ? `<${email.sender}>` : '';
@@ -366,10 +444,33 @@ function renderEmailDetail(email) {
   };
   document.getElementById('ed-tags').innerHTML = tagMap[email.category] || '';
 
-  // Body: render as HTML (came from trusted local encrypted DB)
+  // Body: render inside sandboxed iframe so email CSS/fonts can't leak into the app
   const bodyEl = document.getElementById('ed-body-content');
+  bodyEl.innerHTML = '';
   if (email.body) {
-    bodyEl.innerHTML = email.body;
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('sandbox', 'allow-same-origin allow-popups allow-popups-to-escape-sandbox');
+    // Inject base reset so email HTML renders cleanly regardless of its own styles
+    const baseStyle = `
+      html,body{margin:0;padding:0}
+      body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
+           font-size:14px;line-height:1.65;color:#3d3530;overflow-x:hidden}
+      img{max-width:100%!important;height:auto!important}
+      table{max-width:100%!important}
+      a{color:#e8402a}
+      *{box-sizing:border-box}
+    `;
+    iframe.srcdoc = `<!DOCTYPE html><html><head><meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <style>${baseStyle}</style></head><body>${email.body}</body></html>`;
+    bodyEl.appendChild(iframe);
+    // Auto-size iframe height to its content so the outer .ed-body scrolls (not the iframe)
+    iframe.addEventListener('load', () => {
+      try {
+        const h = iframe.contentDocument.documentElement.scrollHeight;
+        iframe.style.height = Math.max(h, 200) + 'px';
+      } catch(e) {}
+    });
   } else if (email.snippet) {
     bodyEl.innerHTML = `<p>${escHtml(email.snippet)}</p>`;
   } else {
@@ -597,26 +698,80 @@ function renderBillsPanel(bills, orders = []) {
 
     const el = document.createElement('div');
     el.className = 'bill-item';
+    el.title = 'Click to open email';
     el.innerHTML = `
       <div class="bi-icon">${getBillerIcon(bill.biller)}</div>
       <div class="bi-info">
         <div class="bi-name">${escHtml(bill.biller || 'Unknown')}</div>
         <div class="bi-due">${dueText}</div>
       </div>
-      <div class="bi-amt${isOverdue ? ' urgent' : ''}">RM${amt.toFixed(2)}</div>`;
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0">
+        <div class="bi-amt${isOverdue ? ' urgent' : ''}">RM${amt.toFixed(2)}</div>
+        <button class="bi-pay-btn">✓ Paid</button>
+      </div>`;
 
-    el.title = 'Click to mark as paid';
+    // Click bill row → open related email
     el.onclick = () => {
+      if (bill.email_id) selectEmail(bill.email_id);
+    };
+
+    // "✓ Paid" button → mark paid (stops propagation so row click doesn't fire)
+    el.querySelector('.bi-pay-btn').addEventListener('click', e => {
+      e.stopPropagation();
       updateBillStatus(bill.id, 'paid')
         .then(() => { showToast('Marked as paid!'); loadBills(); })
         .catch(err => showApiError(err));
-    };
+    });
 
     list.appendChild(el);
   });
 
   document.getElementById('bills-total-amt').textContent = 'RM' + total.toFixed(2);
   document.getElementById('bills-overdue-count').textContent = String(overdueCount);
+}
+
+// ── CATEGORY BADGES ───────────────────────────────────────────────────────────
+async function loadCategoryBadges() {
+  try {
+    const [inboxUnread, bills, govt, receipts, work, important, promotions, sent, draft, spam] = await Promise.all([
+      fetchEmails({ folder: 'inbox',   unread: true, limit: 1, offset: 0 }),  // inbox unread (excl. promos)
+      fetchEmails({ category: 'bill',               limit: 1, offset: 0 }),
+      fetchEmails({ category: 'govt',               limit: 1, offset: 0 }),
+      fetchEmails({ category: 'receipt',            limit: 1, offset: 0 }),
+      fetchEmails({ category: 'work',               limit: 1, offset: 0 }),
+      fetchEmails({ important: '1',                 limit: 1, offset: 0 }),
+      fetchEmails({ tab: 'promotions',              limit: 1, offset: 0 }),
+      fetchEmails({ folder: 'sent',                 limit: 1, offset: 0 }),
+      fetchEmails({ folder: 'draft',                limit: 1, offset: 0 }),
+      fetchEmails({ folder: 'spam',                 limit: 1, offset: 0 }),
+    ]);
+    const set = (id, n) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = n > 0 ? String(n) : '';
+    };
+    set('badge-inbox',      inboxUnread.total ?? 0);
+    set('badge-bills',      bills.total       ?? 0);
+    set('badge-govt',       govt.total        ?? 0);
+    set('badge-receipts',   receipts.total    ?? 0);
+    set('badge-work',       work.total        ?? 0);
+    set('badge-important',  important.total   ?? 0);
+    set('badge-promotions', promotions.total  ?? 0);
+    set('badge-sent',       sent.total        ?? 0);
+    set('badge-draft',      draft.total       ?? 0);
+    set('badge-spam',       spam.total        ?? 0);
+    // All Mail badge: total across every folder (no badge shown — count is just informational)
+    // Intentionally not setting badge-allmail to avoid a huge unmanageable number
+  } catch { /* badges are non-critical */ }
+}
+
+// ── PROGRESS OVERLAY ──────────────────────────────────────────────────────────
+function showProgress(msg, sub) {
+  document.getElementById('progress-msg').textContent = msg || 'Working…';
+  document.getElementById('progress-sub').textContent = sub || 'Please wait';
+  document.getElementById('progress-overlay').classList.add('show');
+}
+function hideProgress() {
+  document.getElementById('progress-overlay').classList.remove('show');
 }
 
 // ── SYNC ──────────────────────────────────────────────────────────────────────
@@ -628,24 +783,142 @@ async function doSync() {
   btn.textContent = '↻ Syncing…';
   btn.disabled = true;
   if (status) status.textContent = '';
+  showProgress('Syncing emails…', 'Fetching new messages from your accounts');
 
   try {
     await triggerSync();
-    showToast('Sync complete!');
     // Reload all data panels
-    await Promise.all([loadEmails(true), loadAccounts(), loadBills()]);
+    await Promise.all([loadEmails(true), loadAccounts(), loadBills(), loadCategoryBadges()]);
     if (status) {
       status.textContent = 'Last sync: ' + new Date().toLocaleTimeString('en-MY', {
         hour: '2-digit', minute: '2-digit', hour12: true
       });
     }
+    showToast('Sync complete!');
   } catch (err) {
     showToast('Sync failed: ' + (err.message || 'Unknown error'));
     if (status) status.textContent = 'Sync failed';
   } finally {
     btn.textContent = '↻ Sync';
     btn.disabled = false;
+    hideProgress();
   }
+}
+
+// ── SETTINGS MODAL ───────────────────────────────────────────────────────────
+function openSettings() {
+  document.getElementById('profile-dropdown').classList.remove('open');
+  renderSettingsAccounts();
+  document.getElementById('settings-modal').classList.add('open');
+}
+function closeSettings() {
+  document.getElementById('settings-modal').classList.remove('open');
+}
+
+function renderSettingsAccounts() {
+  const list = document.getElementById('settings-accounts-list');
+  if (!list) return;
+  if (accountsData.length === 0) {
+    list.innerHTML = '<div style="color:var(--ink4);font-size:13px;padding:4px 0">No accounts connected</div>';
+    return;
+  }
+  const providerColors = { gmail: '#4285f4', outlook: '#0078d4' };
+  list.innerHTML = '';
+  accountsData.forEach(acct => {
+    const color = providerColors[acct.provider] || 'var(--purple)';
+    const lastSync = acct.last_synced
+      ? 'Last sync: ' + new Date(acct.last_synced).toLocaleString('en-MY', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true })
+      : 'Never synced';
+    const card = document.createElement('div');
+    card.className = 'modal-acct-card';
+    card.innerHTML = `
+      <div class="mac-dot" style="background:${color}"></div>
+      <div class="mac-info">
+        <div class="mac-email">${escHtml(acct.label || acct.email)}</div>
+        <div class="mac-sync">${lastSync}</div>
+      </div>
+      <button class="mac-btn" data-id="${escHtml(acct.id)}">↺ Re-sync from scratch</button>`;
+    card.querySelector('.mac-btn').addEventListener('click', () => {
+      confirmResync(acct.id, acct.label || acct.email);
+    });
+    list.appendChild(card);
+  });
+}
+
+// ── CONFIRM MODAL ─────────────────────────────────────────────────────────────
+let _confirmedAction = null;
+
+function openConfirm(message, action) {
+  _confirmedAction = action;
+  document.getElementById('confirm-message').innerHTML = message;
+  document.getElementById('confirm-input').value = '';
+  document.getElementById('confirm-submit').disabled = true;
+  document.getElementById('confirm-modal').classList.add('open');
+  setTimeout(() => document.getElementById('confirm-input').focus(), 100);
+}
+function closeConfirm() {
+  document.getElementById('confirm-modal').classList.remove('open');
+  _confirmedAction = null;
+}
+async function runConfirmedAction() {
+  if (!_confirmedAction) return;
+  const btn = document.getElementById('confirm-submit');
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+  try {
+    await _confirmedAction();
+    // action may already close the modal (e.g. resync/wipe), but safe to call again
+    closeConfirm();
+  } catch (err) {
+    showToast('Error: ' + (err.message || 'Unknown error'));
+    hideProgress();
+    btn.disabled = false;
+    btn.textContent = 'Delete';
+  }
+}
+
+function confirmResync(accountId, label) {
+  openConfirm(
+    `This will delete all synced emails for <strong>${escHtml(label)}</strong> and re-fetch everything on the next sync. Your actual email account is not affected.`,
+    async () => {
+      closeConfirm();
+      showProgress('Deleting emails…', `Clearing data for ${label}`);
+      try {
+        await apiFetch('/api/accounts/' + accountId + '/emails', { method: 'DELETE' });
+        showProgress('Re-syncing…', 'Fetching fresh messages from your account');
+        await triggerSync(accountId);
+        await Promise.all([loadEmails(true), loadAccounts(), loadBills(), loadCategoryBadges()]);
+        renderSettingsAccounts();
+        showToast('Re-sync complete!');
+      } finally {
+        hideProgress();
+      }
+    }
+  );
+}
+
+function confirmWipeAll() {
+  openConfirm(
+    'This will permanently delete <strong>all synced emails and bills</strong> from this device across every connected account. Your actual email accounts are not affected. The next sync will re-fetch everything.',
+    async () => {
+      closeConfirm();
+      showProgress('Deleting all email data…', 'This may take a moment');
+      try {
+        await apiFetch('/api/emails', { method: 'DELETE' });
+        emailCache = []; emailOffset = 0; emailHasMore = false;
+        document.getElementById('el-items').innerHTML =
+          '<div style="padding:32px;text-align:center;color:var(--ink4);font-size:13px">No emails found</div>';
+        document.getElementById('email-count').textContent = '0 emails';
+        document.getElementById('ed-empty').style.display = '';
+        document.getElementById('ed-content').style.display = 'none';
+        await Promise.all([loadAccounts(), loadBills(), loadCategoryBadges()]);
+        renderSettingsAccounts();
+        showToast('All email data deleted.');
+      } finally {
+        hideProgress();
+      }
+    }
+  );
 }
 
 // ── INIT ─────────────────────────────────────────────────────────────────────
@@ -655,5 +928,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadAccounts(),
     loadEmails(true),
     loadBills(),
+    loadCategoryBadges(),
   ]);
 });

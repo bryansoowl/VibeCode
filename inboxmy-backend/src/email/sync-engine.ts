@@ -4,6 +4,7 @@ import { encrypt } from '../crypto'
 import { fetchNewEmails as fetchGmail } from './gmail-client'
 import { fetchNewEmails as fetchOutlook } from './outlook-client'
 import { parseEmail } from '../parsers'
+import { scoreSpam } from '../parsers/spam-scorer'
 import { randomUUID } from 'crypto'
 import type { NormalizedEmail } from './types'
 
@@ -33,8 +34,8 @@ export async function syncAccount(
     const insertEmail = db.prepare(`
       INSERT OR IGNORE INTO emails
         (id, account_id, thread_id, subject_enc, sender, sender_name,
-         received_at, is_read, category, body_enc, snippet, raw_size)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         received_at, is_read, folder, tab, is_important, category, body_enc, snippet, raw_size)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
 
     const insertBill = db.prepare(`
@@ -47,11 +48,21 @@ export async function syncAccount(
         const parsed = parseEmail(email)
         const body = email.bodyHtml ?? email.bodyText ?? ''
 
+        // Apply InboxMY spam scorer on top of Gmail's own detection.
+        // Only promotes inbox emails to spam — never demotes confirmed spam.
+        const spamResult = scoreSpam(email)
+        const finalFolder = spamResult.isSpam ? 'spam' : (email.folder ?? 'inbox')
+        // Spam emails get no tab (they're not inbox tabs)
+        const finalTab    = finalFolder === 'spam' ? 'primary' : (email.tab ?? 'primary')
+
         const result = insertEmail.run(
           email.id, accountId, email.threadId ?? null,
           encrypt(email.subject, dataKey),
           email.sender, email.senderName ?? null,
           email.receivedAt, email.isRead ? 1 : 0,
+          finalFolder,
+          finalTab,
+          email.isImportant ? 1 : 0,
           parsed.category ?? null,
           body ? encrypt(body, dataKey) : null,
           email.snippet ? encrypt(email.snippet, dataKey) : null,

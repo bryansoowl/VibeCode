@@ -11,7 +11,7 @@ billsRouter.get('/', (req, res) => {
   const { status } = req.query
 
   let query = `
-    SELECT pb.id, pb.biller, pb.amount_rm, pb.due_date, pb.account_ref, pb.status,
+    SELECT pb.id, pb.email_id, pb.biller, pb.amount_rm, pb.due_date, pb.account_ref, pb.status,
       e.subject_enc, e.received_at, e.account_id
     FROM parsed_bills pb
     JOIN emails e ON e.id = pb.email_id
