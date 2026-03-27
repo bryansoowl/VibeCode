@@ -506,7 +506,7 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
         <div class="confirm-warning-icon">⚠️</div>
         <div class="confirm-warning-text" id="confirm-message">This action cannot be undone.</div>
       </div>
-      <div class="confirm-type-label">Type <strong>DELETE</strong> to confirm</div>
+      <div class="confirm-type-label" id="confirm-type-label">Type <strong>DELETE</strong> to confirm</div>
       <input class="confirm-input" id="confirm-input" type="text" placeholder="DELETE"
              oninput="document.getElementById('confirm-submit').disabled=this.value!=='DELETE'">
       <div class="confirm-actions">

@@ -848,17 +848,34 @@ function renderSettingsAccounts() {
 // ── CONFIRM MODAL ─────────────────────────────────────────────────────────────
 let _confirmedAction = null;
 
-function openConfirm(message, action) {
+function openConfirm(message, action, { simple = false } = {}) {
   _confirmedAction = action;
   document.getElementById('confirm-message').innerHTML = message;
-  document.getElementById('confirm-input').value = '';
-  document.getElementById('confirm-submit').disabled = true;
+  const typeLabel = document.getElementById('confirm-type-label');
+  const input = document.getElementById('confirm-input');
+  const submit = document.getElementById('confirm-submit');
+  if (simple) {
+    typeLabel.style.display = 'none';
+    input.style.display = 'none';
+    submit.disabled = false;
+  } else {
+    typeLabel.style.display = '';
+    input.style.display = '';
+    input.value = '';
+    submit.disabled = true;
+    setTimeout(() => input.focus(), 100);
+  }
   document.getElementById('confirm-modal').classList.add('open');
-  setTimeout(() => document.getElementById('confirm-input').focus(), 100);
 }
 function closeConfirm() {
   document.getElementById('confirm-modal').classList.remove('open');
   _confirmedAction = null;
+  // Always restore modal to default state for the next caller
+  document.getElementById('confirm-type-label').style.display = '';
+  document.getElementById('confirm-input').style.display = '';
+  document.getElementById('confirm-input').value = '';
+  document.getElementById('confirm-submit').disabled = true;
+  document.getElementById('confirm-submit').textContent = 'Delete';
 }
 async function runConfirmedAction() {
   if (!_confirmedAction) return;
