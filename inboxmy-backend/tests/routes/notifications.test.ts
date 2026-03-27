@@ -173,3 +173,52 @@ describe('GET /api/notifications/due-soon', () => {
     expect(res.status).toBe(401)
   })
 })
+
+// ── POST /api/notifications/ai-summary ────────────────────────────────────────
+describe('POST /api/notifications/ai-summary', () => {
+  it('returns 401 without session', async () => {
+    const { default: request } = await import('supertest')
+    const { app } = await import('../../src/server')
+    const res = await request(app)
+      .post('/api/notifications/ai-summary')
+      .send({ bills: [], geminiKey: 'test-key' })
+    expect(res.status).toBe(401)
+  })
+
+  it('returns 400 when bills is missing', async () => {
+    const { agent } = await createTestUser()
+    const res = await agent
+      .post('/api/notifications/ai-summary')
+      .send({ geminiKey: 'test-key' })
+    expect(res.status).toBe(400)
+    expect(res.body.error).toBeTruthy()
+  })
+
+  it('returns 400 when geminiKey is missing', async () => {
+    const { agent } = await createTestUser()
+    const res = await agent
+      .post('/api/notifications/ai-summary')
+      .send({ bills: [] })
+    expect(res.status).toBe(400)
+    expect(res.body.error).toBeTruthy()
+  })
+
+  it('returns 400 when geminiKey is whitespace-only', async () => {
+    const { agent } = await createTestUser()
+    const res = await agent
+      .post('/api/notifications/ai-summary')
+      .send({ bills: [], geminiKey: '   ' })
+    expect(res.status).toBe(400)
+    expect(res.body.error).toBeTruthy()
+  })
+
+  it('returns 200 with empty array for empty bills input', async () => {
+    const { agent } = await createTestUser()
+    const res = await agent
+      .post('/api/notifications/ai-summary')
+      .send({ bills: [], geminiKey: 'fake-key' })
+    expect(res.status).toBe(200)
+    expect(Array.isArray(res.body)).toBe(true)
+    expect(res.body).toHaveLength(0)
+  })
+})
