@@ -228,7 +228,20 @@ async function runSchedulerTick() {
     const bill = fresh.find((b) => b.id === r.billId)
     if (!bill) continue
 
-    new Notification({ title: r.title, body: r.body }).show()
+    const notif = new Notification({
+      title: r.title,
+      body: r.body,
+      icon: path.join(__dirname, 'assets', 'icon.png'),
+      actions: [{ type: 'button', text: 'View Bill' }],
+    })
+    notif.on('action', (_, index) => {
+      if (index === 0) {
+        mainWindow?.show()
+        mainWindow?.focus()
+        mainWindow?.webContents.send('navigate-to-bill', bill.id)
+      }
+    })
+    notif.show()
 
     const key = makeNotificationKey(bill.id, now)
     notified[key] = true
