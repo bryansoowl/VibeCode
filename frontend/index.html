@@ -317,6 +317,24 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
   background: var(--coral, #e8402a);
   color: #fff;
 }
+
+/* ── AI Settings ─────────────────────────────────────────────────────── */
+.settings-section { margin-bottom: 24px; }
+.settings-section-title { font-size: 13px; font-weight: 600; margin: 0 0 4px; color: var(--ink2, #3d3530); }
+.settings-section-desc { font-size: 12px; color: var(--ink4, #888); margin: 0 0 12px; }
+.settings-field { margin-bottom: 12px; }
+.settings-field label { display: block; font-size: 13px; color: var(--ink2, #3d3530); margin-bottom: 4px; }
+.input-row { display: flex; gap: 8px; }
+.input-row input[type="password"] { flex: 1; padding: 6px 10px; border: 1px solid var(--border, #ddd); border-radius: 4px; font-size: 13px; }
+.key-status { font-size: 12px; }
+.key-status.saved { color: green; }
+.key-status.error { color: var(--coral, #e8402a); }
+
+/* ── Bill highlight ──────────────────────────────────────────────────── */
+.bill-item.highlight {
+  box-shadow: 0 0 0 2px var(--coral, #e8402a);
+  transition: box-shadow 0.3s;
+}
 </style>
 </head>
 <body>
@@ -548,6 +566,28 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
     <div class="modal-body">
       <div class="modal-section-label">Connected accounts</div>
       <div id="settings-accounts-list"><div style="color:var(--ink4);font-size:13px">Loading…</div></div>
+
+      <!-- AI Notifications settings section -->
+      <div class="settings-section" id="settings-ai">
+        <h3 class="settings-section-title">AI Notifications</h3>
+        <p class="settings-section-desc">Powered by Gemini 2.0 Flash. Your key is stored encrypted on this device only.</p>
+
+        <div class="settings-field">
+          <label for="gemini-key-input">Gemini API Key</label>
+          <div class="input-row">
+            <input type="password" id="gemini-key-input" placeholder="AIza..." autocomplete="off" />
+            <button id="gemini-key-save-btn" onclick="saveGeminiKeySetting()">Save</button>
+          </div>
+          <span id="gemini-key-status" class="key-status"></span>
+        </div>
+
+        <div class="settings-field" id="auto-launch-field">
+          <label>
+            <input type="checkbox" id="auto-launch-toggle" onchange="toggleAutoLaunch(this.checked)" />
+            Launch InboxMY at Windows startup
+          </label>
+        </div>
+      </div>
 
       <div class="danger-zone" style="margin-top:24px">
         <div class="dz-title">⚠️ Danger zone</div>

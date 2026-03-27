@@ -724,6 +724,7 @@ function renderBillsPanel(bills, orders = []) {
 
     const el = document.createElement('div');
     el.className = 'bill-item';
+    el.setAttribute('data-bill-id', b.id)
     el.title = 'Click to open email';
     el.innerHTML = `
       <div class="bi-icon">${getBillerIcon(bill.biller)}</div>
@@ -832,9 +833,48 @@ async function doSync() {
 }
 
 // ── SETTINGS MODAL ───────────────────────────────────────────────────────────
+async function loadAISettings() {
+  // Only run if window.inboxmy is available (Electron context)
+  if (!window.inboxmy) return
+
+  const key = await window.inboxmy.getGeminiKey()
+  const statusEl = document.getElementById('gemini-key-status')
+  if (key) {
+    // Key exists — show masked status
+    if (statusEl) { statusEl.textContent = '✓ Key saved'; statusEl.className = 'key-status saved' }
+  } else {
+    if (statusEl) { statusEl.textContent = ''; statusEl.className = 'key-status' }
+  }
+
+  const autoLaunch = await window.inboxmy.getAutoLaunch()
+  const toggle = document.getElementById('auto-launch-toggle')
+  if (toggle) toggle.checked = !!autoLaunch
+}
+
+async function saveGeminiKeySetting() {
+  if (!window.inboxmy) return
+  const input = document.getElementById('gemini-key-input')
+  const statusEl = document.getElementById('gemini-key-status')
+  if (!input || !input.value.trim()) return
+
+  const result = await window.inboxmy.saveGeminiKey(input.value.trim())
+  if (result && result.ok) {
+    input.value = ''
+    if (statusEl) { statusEl.textContent = '✓ Key saved'; statusEl.className = 'key-status saved' }
+  } else {
+    if (statusEl) { statusEl.textContent = '✗ Failed to save'; statusEl.className = 'key-status error' }
+  }
+}
+
+async function toggleAutoLaunch(enabled) {
+  if (!window.inboxmy) return
+  await window.inboxmy.setAutoLaunch(enabled)
+}
+
 function openSettings() {
   document.getElementById('profile-dropdown').classList.remove('open');
   renderSettingsAccounts();
+  loadAISettings()
   document.getElementById('settings-modal').classList.add('open');
 }
 function closeSettings() {
@@ -1048,6 +1088,33 @@ function confirmWipeAll() {
       }
     }
   );
+}
+
+// ── Electron IPC handlers (only active in Electron context) ──────────────
+if (window.inboxmy) {
+  // Receive live bill data from the background scheduler
+  window.inboxmy.onBillAlert(function(data) {
+    if (data && Array.isArray(data.overdue)) {
+      renderOverdueBanner(data.overdue.map(b => ({ ...b, status: 'overdue' })))
+    }
+  })
+
+  // Deep link: toast click → navigate to specific bill
+  window.inboxmy.onNavigateToBill(function(billId) {
+    // Switch to bills folder
+    const billsFolder = document.getElementById('folder-bills')
+    if (billsFolder) setFolder('bills', billsFolder)
+
+    // Highlight and scroll to the bill after a short delay to allow re-render
+    setTimeout(function() {
+      const billEl = document.querySelector(`[data-bill-id="${billId}"]`)
+      if (billEl) {
+        billEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        billEl.classList.add('highlight')
+        setTimeout(() => billEl.classList.remove('highlight'), 2000)
+      }
+    }, 300)
+  })
 }
 
 // ── INIT ─────────────────────────────────────────────────────────────────────
