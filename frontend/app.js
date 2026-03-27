@@ -609,6 +609,27 @@ function renderAccounts() {
 }
 
 // ── BILLS PANEL ───────────────────────────────────────────────────────────────
+function renderOverdueBanner(bills) {
+  const banner = document.getElementById('overdue-banner')
+  if (!banner) return
+  const overdue = bills.filter(b => b.status === 'overdue')
+  if (!overdue.length) {
+    banner.style.display = 'none'
+    return
+  }
+  const count = overdue.length
+  const text = count === 1
+    ? `1 overdue bill — ${overdue[0].biller}. Pay it now to avoid late fees.`
+    : `${count} overdue bills. Pay them now to avoid late fees.`
+  document.getElementById('overdue-banner-text').textContent = text
+  banner.style.display = 'block'
+}
+
+function dismissOverdueBanner() {
+  const banner = document.getElementById('overdue-banner')
+  if (banner) banner.style.display = 'none'
+}
+
 async function loadBills() {
   try {
     // Fetch unpaid + overdue bills, and all receipts (Shopee/Lazada orders)
@@ -622,6 +643,7 @@ async function loadBills() {
       b.biller && /shopee|lazada/i.test(b.biller)
     );
     renderBillsPanel(bills, orders);
+    renderOverdueBanner(bills);
   } catch (err) {
     const list = document.getElementById('bills-list');
     if (list) list.innerHTML = '<div style="color:var(--coral);font-size:12px">Failed to load bills</div>';

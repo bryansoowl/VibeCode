@@ -272,6 +272,33 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 .confirm-delete{flex:1;padding:9px;border-radius:8px;border:none;background:var(--coral);color:#fff;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;transition:background .15s}
 .confirm-delete:hover:not(:disabled){background:var(--coral2)}
 .confirm-delete:disabled{opacity:.45;cursor:not-allowed}
+
+/* ── Overdue banner ──────────────────────────────────────────────────── */
+#overdue-banner {
+  display: none;
+  background: #e05;
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  cursor: default;
+}
+#overdue-banner button.dismiss-banner {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.6);
+  color: #fff;
+  border-radius: 4px;
+  padding: 2px 8px;
+  margin-left: 12px;
+  cursor: pointer;
+  font-size: 12px;
+}
+#overdue-banner button.dismiss-banner:hover {
+  background: rgba(255,255,255,0.15);
+}
 </style>
 </head>
 <body>
@@ -437,6 +464,11 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 
   <!-- RIGHT PANEL -->
   <div id="right-panel">
+  <!-- Overdue banner — shown when overdue bills exist -->
+  <div id="overdue-banner">
+    <span id="overdue-banner-text"></span>
+    <button class="dismiss-banner" onclick="dismissOverdueBanner()">Dismiss</button>
+  </div>
   <div class="rp-section">
     <div class="rp-title" id="lbl-bills-due">Bills due soon</div>
     <div id="bills-list"><div style="color:var(--ink4);font-size:12px;padding:4px 0">Loading…</div></div>
