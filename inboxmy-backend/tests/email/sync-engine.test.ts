@@ -66,4 +66,14 @@ describe('syncAccount — token_expired flag', () => {
     const row = getDb().prepare('SELECT token_expired FROM accounts WHERE id = ?').get(id) as any
     expect(row.token_expired).toBe(0)
   })
+
+  it('leaves token_expired = 1 unchanged when non-auth error occurs on already-expired account', async () => {
+    const id = randomUUID()
+    seedAccount(id, 'gmail')
+    getDb().prepare('UPDATE accounts SET token_expired = 1 WHERE id = ?').run(id)
+    vi.mocked(mockGmailFetch).mockRejectedValue(new Error('Network timeout'))
+    await syncAccount(id, TEST_KEY)
+    const row = getDb().prepare('SELECT token_expired FROM accounts WHERE id = ?').get(id) as any
+    expect(row.token_expired).toBe(1)
+  })
 })

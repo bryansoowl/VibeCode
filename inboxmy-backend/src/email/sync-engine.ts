@@ -8,6 +8,8 @@ import { scoreSpam } from '../parsers/spam-scorer'
 import { randomUUID } from 'crypto'
 import type { NormalizedEmail } from './types'
 
+const AUTH_ERRORS = /invalid_grant|\b401\b|token has been expired or revoked|\bunauthorized\b|re-auth required/i
+
 export async function syncAccount(
   accountId: string,
   dataKey: Buffer
@@ -89,7 +91,6 @@ export async function syncAccount(
       .run(Date.now(), added, logId)
 
   } catch (err: any) {
-    const AUTH_ERRORS = /invalid_grant|401|token has been expired or revoked|unauthorized|re-auth required/i
     if (AUTH_ERRORS.test(err.message)) {
       db.prepare('UPDATE accounts SET token_expired = 1 WHERE id = ?').run(accountId)
     }
