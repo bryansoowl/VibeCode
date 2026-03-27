@@ -826,21 +826,107 @@ function renderSettingsAccounts() {
   list.innerHTML = '';
   accountsData.forEach(acct => {
     const color = providerColors[acct.provider] || 'var(--purple)';
-    const lastSync = acct.last_synced
-      ? 'Last sync: ' + new Date(acct.last_synced).toLocaleString('en-MY', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true })
-      : 'Never synced';
+    const currentLabel = acct.label || acct.email;
+
+    let statusHtml;
+    if (acct.token_expired === 1) {
+      const url = `/api/accounts/connect/${acct.provider}`;
+      statusHtml = `<div class="mac-sync mac-auth-expired">⚠ Auth expired — <a href="${escHtml(url)}">Reconnect</a></div>`;
+    } else if (acct.last_synced) {
+      const t = new Date(acct.last_synced).toLocaleString('en-MY', {
+        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true
+      });
+      statusHtml = `<div class="mac-sync mac-sync-ok"><span class="mac-sync-dot"></span>Synced ${t}</div>`;
+    } else {
+      statusHtml = `<div class="mac-sync">Never synced</div>`;
+    }
+
     const card = document.createElement('div');
     card.className = 'modal-acct-card';
     card.innerHTML = `
       <div class="mac-dot" style="background:${color}"></div>
       <div class="mac-info">
-        <div class="mac-email">${escHtml(acct.label || acct.email)}</div>
-        <div class="mac-sync">${lastSync}</div>
+        <div class="mac-header">
+          <div class="mac-email">${escHtml(currentLabel)}</div>
+          <button class="mac-rename-btn" title="Rename">✏</button>
+        </div>
+        <div class="mac-rename-row" style="display:none">
+          <input class="mac-rename-input" type="text" value="${escHtml(currentLabel)}">
+          <button class="mac-save-btn">Save</button>
+          <button class="mac-cancel-btn">Cancel</button>
+        </div>
+        ${statusHtml}
       </div>
-      <button class="mac-btn" data-id="${escHtml(acct.id)}">↺ Re-sync from scratch</button>`;
+      <div class="mac-card-actions">
+        <button class="mac-btn">↺ Re-sync from scratch</button>
+        <button class="mac-delete-btn" title="Remove account">×</button>
+      </div>`;
+
+    // ── Rename ────────────────────────────────────────────────────────────────
+    const headerEl = card.querySelector('.mac-header');
+    const renameRow = card.querySelector('.mac-rename-row');
+    const input = card.querySelector('.mac-rename-input');
+
+    card.querySelector('.mac-rename-btn').addEventListener('click', () => {
+      headerEl.style.display = 'none';
+      renameRow.style.display = 'flex';
+      input.focus();
+      input.select();
+    });
+
+    const doSave = async () => {
+      const newLabel = input.value.trim();
+      try {
+        await apiFetch(`/api/accounts/${acct.id}/label`, {
+          method: 'PATCH',
+          body: JSON.stringify({ label: newLabel })
+        });
+        const idx = accountsData.findIndex(a => a.id === acct.id);
+        if (idx !== -1) accountsData[idx].label = newLabel;
+        renderAccounts();
+        renderSettingsAccounts();
+      } catch (err) {
+        showToast('Failed to rename: ' + (err.message || 'Unknown error'));
+        input.value = acct.label || acct.email; // reset to original on failure
+        headerEl.style.display = '';
+        renameRow.style.display = 'none';
+      }
+    };
+
+    const doCancel = () => {
+      headerEl.style.display = '';
+      renameRow.style.display = 'none';
+      input.value = acct.label || acct.email;
+    };
+
+    card.querySelector('.mac-save-btn').addEventListener('click', doSave);
+    card.querySelector('.mac-cancel-btn').addEventListener('click', doCancel);
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') doSave();
+      if (e.key === 'Escape') doCancel();
+    });
+
+    // ── Re-sync ───────────────────────────────────────────────────────────────
     card.querySelector('.mac-btn').addEventListener('click', () => {
       confirmResync(acct.id, acct.label || acct.email);
     });
+
+    // ── Delete ────────────────────────────────────────────────────────────────
+    card.querySelector('.mac-delete-btn').addEventListener('click', () => {
+      const label = acct.label || acct.email;
+      openConfirm(
+        `Remove <strong>${escHtml(label)}</strong>? This deletes all its synced emails from this device. Your actual mailbox is not affected.`,
+        async () => {
+          await apiFetch(`/api/accounts/${acct.id}`, { method: 'DELETE' });
+          accountsData.splice(accountsData.findIndex(a => a.id === acct.id), 1);
+          renderAccounts();
+          renderSettingsAccounts();
+          showToast('Account removed.');
+        },
+        { simple: true }
+      );
+    });
+
     list.appendChild(card);
   });
 }
