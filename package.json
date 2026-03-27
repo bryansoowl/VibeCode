@@ -1,0 +1,46 @@
+{
+  "name": "inboxmy",
+  "version": "0.6.0",
+  "description": "Privacy-first unified email dashboard for Malaysia",
+  "main": "electron/main.js",
+  "scripts": {
+    "electron:dev": "concurrently \"npm run dev --prefix inboxmy-backend\" \"wait-on http://localhost:3000/health && electron .\"",
+    "start": "npm run build --prefix inboxmy-backend && electron .",
+    "build": "npm run build --prefix inboxmy-backend && electron-builder",
+    "dist": "npm run build --prefix inboxmy-backend && electron-builder --publish never",
+    "test:utils": "vitest run --config vitest.config.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.0.0",
+    "vitest": "^2.0.0",
+    "wait-on": "^8.0.0"
+  },
+  "dependencies": {
+    "electron-auto-launch": "^5.0.6",
+    "electron-updater": "^6.0.0"
+  },
+  "build": {
+    "appId": "my.inbox.app",
+    "productName": "InboxMY",
+    "win": {
+      "target": "nsis",
+      "icon": "electron/assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "files": [
+      "electron/**/*",
+      "frontend/**/*",
+      "inboxmy-backend/dist/**/*",
+      "inboxmy-backend/node_modules/**/*",
+      "inboxmy-backend/package.json"
+    ],
+    "extraResources": [
+      { "from": "inboxmy-backend/data", "to": "data" }
+    ]
+  }
+}
