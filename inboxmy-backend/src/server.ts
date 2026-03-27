@@ -8,6 +8,7 @@ import { getDb } from './db'
 import { accountsRouter } from './routes/accounts'
 import { emailsRouter } from './routes/emails'
 import { billsRouter } from './routes/bills'
+import { notificationsRouter } from './routes/notifications'
 import { syncRouter } from './routes/sync'
 import { handleCallback as gmailCallback } from './auth/gmail'
 import { handleCallback as outlookCallback } from './auth/outlook'
@@ -98,6 +99,7 @@ app.use('/api', requireAuth)
 app.use('/api/accounts', accountsRouter)
 app.use('/api/emails', emailsRouter)
 app.use('/api/bills', billsRouter)
+app.use('/api/notifications', notificationsRouter)
 app.use('/api/sync', syncRouter)
 
 app.get('/health', (req, res) => res.json({ ok: true, ts: Date.now() }))
