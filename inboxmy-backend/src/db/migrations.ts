@@ -73,6 +73,8 @@ const MIGRATIONS: string[] = [
   ALTER TABLE emails ADD COLUMN tab TEXT NOT NULL DEFAULT 'primary';
   CREATE INDEX IF NOT EXISTS idx_emails_tab ON emails(tab);
   `,
+  // Migration 5: per-account token expiry flag
+  `ALTER TABLE accounts ADD COLUMN token_expired INTEGER NOT NULL DEFAULT 0;`,
 ]
 
 export function runMigrations(db: Database.Database): void {

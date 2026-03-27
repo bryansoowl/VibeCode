@@ -67,3 +67,49 @@ describe('DELETE /api/accounts/:id', () => {
     expect(res.status).toBe(404)
   })
 })
+
+describe('GET /api/accounts — token_expired field', () => {
+  it('returns token_expired = 0 by default for each account', async () => {
+    const { agent, id: userId } = await createTestUser()
+    const id = randomUUID()
+    seedAccount(userId, id, `te-test-${id}@test.com`)
+    const res = await agent.get('/api/accounts')
+    expect(res.status).toBe(200)
+    const acct = res.body.accounts.find((a: any) => a.id === id)
+    expect(acct).toBeDefined()
+    expect(acct.token_expired).toBe(0)
+  })
+})
+
+describe('PATCH /api/accounts/:id/label — edge cases', () => {
+  it('accepts empty string label', async () => {
+    const { agent, id: userId } = await createTestUser()
+    const id = randomUUID()
+    seedAccount(userId, id, `empty-label-${id}@test.com`)
+    const res = await agent.patch(`/api/accounts/${id}/label`).send({ label: '' })
+    expect(res.status).toBe(200)
+    const row = getDb().prepare('SELECT label FROM accounts WHERE id = ?').get(id) as any
+    expect(row.label).toBe('')
+  })
+})
+
+describe('DELETE /api/accounts/:id — cascade', () => {
+  it('deletes associated emails via ON DELETE CASCADE', async () => {
+    const { agent, id: userId } = await createTestUser()
+    const acctId = randomUUID()
+    seedAccount(userId, acctId, `cascade-${acctId}@test.com`)
+    getDb().prepare(`
+      INSERT INTO emails
+        (id, account_id, subject_enc, sender, received_at, is_read, folder, tab, is_important)
+      VALUES (?, ?, ?, 'x@x.com', ?, 0, 'inbox', 'primary', 0)
+    `).run(randomUUID(), acctId, encryptSystem('subj'), Date.now())
+
+    const before = getDb().prepare('SELECT count(*) as n FROM emails WHERE account_id = ?').get(acctId) as any
+    expect(before.n).toBe(1)
+
+    await agent.delete(`/api/accounts/${acctId}`)
+
+    const after = getDb().prepare('SELECT count(*) as n FROM emails WHERE account_id = ?').get(acctId) as any
+    expect(after.n).toBe(0)
+  })
+})

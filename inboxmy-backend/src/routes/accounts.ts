@@ -10,7 +10,7 @@ accountsRouter.get('/', (req, res) => {
   const db = getDb()
   const user = (req as any).user
   const accounts = db.prepare(
-    'SELECT id, provider, email, label, created_at, last_synced FROM accounts WHERE user_id = ?'
+    'SELECT id, provider, email, label, created_at, last_synced, token_expired FROM accounts WHERE user_id = ?'
   ).all(user.id)
   res.json({ accounts })
 })
