@@ -613,19 +613,22 @@ function renderOverdueBanner(bills) {
   const banner = document.getElementById('overdue-banner')
   if (!banner) return
   const overdue = bills.filter(b => b.status === 'overdue')
-  if (!overdue.length) {
+  if (!overdue.length || sessionStorage.getItem('overdue-banner-dismissed')) {
     banner.style.display = 'none'
     return
   }
-  const count = overdue.length
-  const text = count === 1
-    ? `1 overdue bill — ${overdue[0].biller}. Pay it now to avoid late fees.`
-    : `${count} overdue bills. Pay them now to avoid late fees.`
-  document.getElementById('overdue-banner-text').textContent = text
-  banner.style.display = 'block'
+  const n = overdue.length
+  const total = overdue.reduce((sum, b) => sum + (b.amount_rm || 0), 0)
+  const text = n === 1
+    ? `You have <strong>1</strong> overdue bill — <strong>${overdue[0].biller}</strong>`
+    : `You have <strong>${n}</strong> overdue bills`
+  const totalStr = total > 0 ? ` — Total <strong>RM${total.toFixed(2)}</strong>` : ''
+  document.getElementById('overdue-banner-text').innerHTML = text + totalStr
+  banner.style.display = 'flex'
 }
 
 function dismissOverdueBanner() {
+  sessionStorage.setItem('overdue-banner-dismissed', '1')
   const banner = document.getElementById('overdue-banner')
   if (banner) banner.style.display = 'none'
 }

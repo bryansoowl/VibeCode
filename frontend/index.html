@@ -276,28 +276,32 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 /* ── Overdue banner ──────────────────────────────────────────────────── */
 #overdue-banner {
   display: none;
-  background: #e05;
-  color: #fff;
+  align-items: center;
+  gap: 8px;
+  background: var(--coral-bg, #fff3f0);
+  color: var(--ink2, #333);
+  border: 1px solid var(--coral, #e8402a);
   padding: 10px 16px;
   border-radius: 6px;
   margin-bottom: 12px;
   font-size: 13px;
   font-weight: 500;
   line-height: 1.4;
-  cursor: default;
 }
-#overdue-banner button.dismiss-banner {
+#overdue-banner strong {
+  color: var(--coral, #e8402a);
+}
+#overdue-banner .ob-dismiss {
+  margin-left: auto;
   background: none;
-  border: 1px solid rgba(255,255,255,0.6);
-  color: #fff;
-  border-radius: 4px;
-  padding: 2px 8px;
-  margin-left: 12px;
+  border: none;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 16px;
+  color: var(--ink4, #999);
+  padding: 0 4px;
 }
-#overdue-banner button.dismiss-banner:hover {
-  background: rgba(255,255,255,0.15);
+#overdue-banner .ob-dismiss:hover {
+  color: var(--coral, #e8402a);
 }
 </style>
 </head>
@@ -467,7 +471,7 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
   <!-- Overdue banner — shown when overdue bills exist -->
   <div id="overdue-banner">
     <span id="overdue-banner-text"></span>
-    <button class="dismiss-banner" onclick="dismissOverdueBanner()">Dismiss</button>
+    <button class="ob-dismiss" onclick="dismissOverdueBanner()" title="Dismiss">×</button>
   </div>
   <div class="rp-section">
     <div class="rp-title" id="lbl-bills-due">Bills due soon</div>
