@@ -113,3 +113,63 @@ describe('PATCH /api/bills/auto-mark-overdue', () => {
     expect(res.status).toBe(401)
   })
 })
+
+// ── GET /api/notifications/due-soon ───────────────────────────────────────────
+describe('GET /api/notifications/due-soon', () => {
+  it('returns unpaid bills due within 72h', async () => {
+    const { agent, id: userId } = await createTestUser()
+    const in24h = Date.now() + 24 * 60 * 60 * 1000
+    const { billId } = seedBill(userId, { status: 'unpaid', dueDateMs: in24h })
+
+    const res = await agent.get('/api/notifications/due-soon')
+    expect(res.status).toBe(200)
+    expect(res.body.bills.some((b: any) => b.id === billId)).toBe(true)
+  })
+
+  it('includes bill due at exactly now+72h (inclusive boundary)', async () => {
+    const { agent, id: userId } = await createTestUser()
+    const exactly72h = Date.now() + 72 * 60 * 60 * 1000
+    const { billId } = seedBill(userId, { status: 'unpaid', dueDateMs: exactly72h })
+
+    const res = await agent.get('/api/notifications/due-soon')
+    expect(res.status).toBe(200)
+    expect(res.body.bills.some((b: any) => b.id === billId)).toBe(true)
+  })
+
+  it('excludes unpaid bills due after 72h', async () => {
+    const { agent, id: userId } = await createTestUser()
+    const in5days = Date.now() + 5 * 24 * 60 * 60 * 1000
+    const { billId } = seedBill(userId, { status: 'unpaid', dueDateMs: in5days })
+
+    const res = await agent.get('/api/notifications/due-soon')
+    expect(res.status).toBe(200)
+    expect(res.body.bills.some((b: any) => b.id === billId)).toBe(false)
+  })
+
+  it('returns overdue bills regardless of due_date', async () => {
+    const { agent, id: userId } = await createTestUser()
+    const pastDue = Date.now() - 3 * 24 * 60 * 60 * 1000
+    const { billId } = seedBill(userId, { status: 'overdue', dueDateMs: pastDue })
+
+    const res = await agent.get('/api/notifications/due-soon')
+    expect(res.status).toBe(200)
+    expect(res.body.bills.some((b: any) => b.id === billId)).toBe(true)
+  })
+
+  it('excludes paid bills', async () => {
+    const { agent, id: userId } = await createTestUser()
+    const in24h = Date.now() + 24 * 60 * 60 * 1000
+    const { billId } = seedBill(userId, { status: 'paid', dueDateMs: in24h })
+
+    const res = await agent.get('/api/notifications/due-soon')
+    expect(res.status).toBe(200)
+    expect(res.body.bills.some((b: any) => b.id === billId)).toBe(false)
+  })
+
+  it('returns 401 without session', async () => {
+    const { default: request } = await import('supertest')
+    const { app } = await import('../../src/server')
+    const res = await request(app).get('/api/notifications/due-soon')
+    expect(res.status).toBe(401)
+  })
+})
