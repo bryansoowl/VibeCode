@@ -902,7 +902,7 @@ function renderSettingsAccounts() {
     card.querySelector('.mac-save-btn').addEventListener('click', doSave);
     card.querySelector('.mac-cancel-btn').addEventListener('click', doCancel);
     input.addEventListener('keydown', e => {
-      if (e.key === 'Enter') doSave();
+      if (e.key === 'Enter') { e.preventDefault(); doSave(); }
       if (e.key === 'Escape') doCancel();
     });
 
