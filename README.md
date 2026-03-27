@@ -328,6 +328,33 @@ Manual test checklist for Plan 4 (requires running server):
 
 ---
 
+### Plan 5 — Account Management UI tests
+
+| Test file | What it tests |
+|---|---|
+| `tests/routes/accounts.test.ts` | GET returns `token_expired` field; empty-string label accepted; DELETE cascades to emails |
+| `tests/email/sync-engine.test.ts` | `token_expired=1` on Gmail `invalid_grant`; Outlook re-auth error; no flag on non-auth errors; clears on success |
+
+To run just Plan 5 tests:
+```powershell
+$env:ENCRYPTION_KEY="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+$env:DATA_DIR="./data-test"
+npx vitest run tests/routes/accounts.test.ts tests/email/sync-engine.test.ts
+```
+
+Manual test checklist for Plan 5 (requires running server):
+
+1. Open Settings → account cards show ✏ rename button and × delete button
+2. Click ✏ → label becomes editable input → Enter saves → sidebar updates instantly
+3. Escape during rename → reverts with no API call
+4. Click × → simple confirm modal (no type-DELETE), Delete immediately enabled
+5. Confirm delete → account gone from sidebar and settings, toast shown
+6. After delete, open wipe-all confirm → type-DELETE input is back (modal restored correctly)
+7. Set `token_expired=1` in DB → reload → red "⚠ Auth expired — Reconnect" badge on card
+8. Reconnect link points to correct `/api/accounts/connect/gmail` (or `outlook`)
+
+---
+
 To run a single test file:
 ```powershell
 $env:ENCRYPTION_KEY="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -603,7 +630,7 @@ Limited time offer. Shop now and save big!
 | 2 | **Frontend Wiring** | Dashboard panels wired to live API — email list, email detail, accounts sidebar, bills panel, sync button, infinite scroll, error handling | ✅ Done |
 | 3 | **OAuth Credentials Setup** | `npm run setup` wizard, startup config validator with checklist, `SETUP.md` full reference guide, README roadmap remodel | ✅ Done |
 | 4 | **Multi-User Architecture** | User sign-up/sign-in (email+password), per-user AES-256-GCM encrypted data keys, HTTP-only cookie sessions (30-day TTL), email-based password reset, auth middleware on all API routes, OAuth state relay, frontend sign-in page | ✅ Done |
-| 5 | **Account Management UI** | Rename accounts, delete + revoke, re-auth expired tokens, per-account sync status | ⏳ Pending |
+| 5 | **Account Management UI** | Rename accounts, delete + revoke, re-auth expired tokens, per-account sync status | ✅ Done |
 | 6 | **Notifications + Overdue Detection** | Due-date alerts, overdue bill banner, browser notifications | ⏳ Pending |
 | 7 | **Search + Filtering Improvements** | Full-text search, date range filters, multi-account filter, saved searches | ⏳ Pending |
 | 8 | **Packaging + Auto-start on Login** | Electron or system tray wrapper, auto-start on OS login, local-download installer | ⏳ Pending |
@@ -633,17 +660,12 @@ Completed so far:
   AES-256-GCM encrypted data keys, HTTP-only cookie sessions (30-day absolute TTL), forgot-password +
   reset-password with key re-wrap, requireAuth middleware on all API routes, OAuth state relay,
   frontend auth.html login/signup page, sign-out button. 3 test files. 71 tests total passing.
+- Plan 5 (Account Management UI): 100% complete — rename accounts (pencil icon → inline input, Enter/Escape),
+  delete + revoke (simple confirm modal, cascades emails), re-auth badge (token_expired column, sync engine
+  sets/clears it, red reconnect badge in settings), per-account sync status badge (green synced / grey never).
+  2 new test files. 88 tests total passing.
 
-Today's goal is implementing Plan 5: Account Management UI.
-The design spec is at docs/superpowers/specs/2026-03-27-plan5-account-management-ui-design.md
-The implementation plan is at docs/superpowers/plans/2026-03-27-plan5-account-management-ui.md
-
-Key decisions already made:
-- All management controls live in the Settings modal only (sidebar stays clean)
-- Rename via pencil icon → input + Save/Cancel (Enter/Escape supported)
-- Delete via extended openConfirm() simple mode (no type-DELETE required)
-- token_expired column added via Migration 5; set by sync engine on auth errors, cleared on reconnect
-- GET /api/accounts exposes token_expired; red re-auth badge shown when = 1
-
-Do NOT break existing UI. Enhance only. Use the writing-plans skill to review the spec, then implement.
+Today's goal is Plan 6: Notifications + Overdue Detection.
+Add due-date alerts, overdue bill banner, and browser notifications.
+See docs/superpowers/specs/ for the design spec once it is written.
 ```
