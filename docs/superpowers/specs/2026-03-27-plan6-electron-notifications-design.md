@@ -195,7 +195,7 @@ Runs 30s after app launch, then every 60 minutes:
 4. For each bill not in notified.json:
      - Fire native Notification (see below)
      - Write billId + monthYear key to userData/notified.json
-5. app.setBadgeCount(n) with total alert count
+5. setWindowsBadge(n)  // see Section 1 — uses app.setOverlayIcon(), not app.setBadgeCount()
 6. mainWindow.webContents.send('bill-alert', { overdue, dueSoon })
 ```
 
