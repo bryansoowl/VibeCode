@@ -42,6 +42,29 @@ billsRouter.get('/', (req, res) => {
   }
 })
 
+// PATCH /api/bills/auto-mark-overdue
+// Marks all unpaid bills whose due_date has passed as 'overdue'.
+// Called by the Electron scheduler before each notification check.
+billsRouter.patch('/auto-mark-overdue', (req, res) => {
+  const user = (req as any).user
+  const db = getDb()
+  const now = Date.now()
+
+  const result = db.prepare(`
+    UPDATE parsed_bills SET status = 'overdue'
+    WHERE status = 'unpaid'
+      AND due_date IS NOT NULL
+      AND due_date < ?
+      AND email_id IN (
+        SELECT e.id FROM emails e
+        JOIN accounts a ON a.id = e.account_id
+        WHERE a.user_id = ?
+      )
+  `).run(now, user.id)
+
+  res.json({ marked: result.changes })
+})
+
 billsRouter.patch('/:id/status', (req, res) => {
   const { status } = req.body
   if (!['unpaid', 'paid', 'overdue'].includes(status)) {
