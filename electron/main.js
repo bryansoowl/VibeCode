@@ -1,5 +1,5 @@
 // electron/main.js
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, shell, net, safeStorage, Notification, session } = require('electron')
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, net, safeStorage, Notification } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const { spawn } = require('child_process')
@@ -67,7 +67,7 @@ function startBackend() {
   backendProcess.on('exit', (code) => console.log('[backend] exited with code', code))
 }
 
-async function waitForBackend(retries = 20) {
+async function waitForBackend(retries = 40) {
   for (let i = 0; i < retries; i++) {
     try {
       await new Promise((resolve, reject) => {
@@ -89,6 +89,7 @@ function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -101,10 +102,13 @@ function createWindow() {
   })
 
   mainWindow.loadURL(`${BACKEND_URL}/`)
+  mainWindow.once('ready-to-show', () => { mainWindow.show() })
 
   mainWindow.on('close', (e) => {
-    e.preventDefault()
-    mainWindow.hide()
+    if (!app.isQuitting) {
+      e.preventDefault()
+      mainWindow.hide()
+    }
   })
 }
 
@@ -117,7 +121,7 @@ function createTray() {
   const menu = Menu.buildFromTemplate([
     { label: 'Open InboxMY', click: () => mainWindow?.show() },
     { type: 'separator' },
-    { label: 'Quit', click: () => { mainWindow.removeAllListeners('close'); app.quit() } },
+    { label: 'Quit', click: () => { app.isQuitting = true; app.quit() } },
   ])
 
   tray.setToolTip('InboxMY')
@@ -175,6 +179,9 @@ async function runSchedulerTick() {
     return !notified[key]
   })
 
+  // Always push current bills to renderer so the overdue banner stays current
+  mainWindow.webContents.send('bill-alert', { overdue: bills.filter((b) => b.status === 'overdue') })
+
   if (!fresh.length) { setWindowsBadge(mainWindow, bills.length); return }
 
   // 4. AI summary (optional — skip if no key)
@@ -231,9 +238,6 @@ async function runSchedulerTick() {
 
   // 6. Windows taskbar badge
   setWindowsBadge(mainWindow, bills.length)
-
-  // 7. Push live data to renderer
-  mainWindow.webContents.send('bill-alert', { overdue: bills.filter((b) => b.status === 'overdue') })
 }
 
 // ── Gemini key (safeStorage) ─────────────────────────────────────────────────
