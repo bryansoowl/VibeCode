@@ -107,7 +107,8 @@ describe('DELETE /api/accounts/:id — cascade', () => {
     const before = getDb().prepare('SELECT count(*) as n FROM emails WHERE account_id = ?').get(acctId) as any
     expect(before.n).toBe(1)
 
-    await agent.delete(`/api/accounts/${acctId}`)
+    const delRes = await agent.delete(`/api/accounts/${acctId}`)
+    expect(delRes.status).toBe(200)
 
     const after = getDb().prepare('SELECT count(*) as n FROM emails WHERE account_id = ?').get(acctId) as any
     expect(after.n).toBe(0)
