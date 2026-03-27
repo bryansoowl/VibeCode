@@ -650,6 +650,7 @@ async function loadBills() {
   } catch (err) {
     const list = document.getElementById('bills-list');
     if (list) list.innerHTML = '<div style="color:var(--coral);font-size:12px">Failed to load bills</div>';
+    renderOverdueBanner([]);
   }
 }
 

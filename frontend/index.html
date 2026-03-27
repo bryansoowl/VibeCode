@@ -278,8 +278,8 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
   display: none;
   align-items: center;
   gap: 8px;
-  background: var(--coral-bg, #fff3f0);
-  color: var(--ink2, #333);
+  background: var(--coral-bg, #fdf0ed);
+  color: var(--ink2, #3d3530);
   border: 1px solid var(--coral, #e8402a);
   padding: 10px 16px;
   border-radius: 6px;
@@ -302,6 +302,20 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 }
 #overdue-banner .ob-dismiss:hover {
   color: var(--coral, #e8402a);
+}
+#overdue-banner .ob-view {
+  margin-left: 8px;
+  background: none;
+  border: 1px solid var(--coral, #e8402a);
+  color: var(--coral, #e8402a);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+#overdue-banner .ob-view:hover {
+  background: var(--coral, #e8402a);
+  color: #fff;
 }
 </style>
 </head>
@@ -471,6 +485,7 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
   <!-- Overdue banner — shown when overdue bills exist -->
   <div id="overdue-banner">
     <span id="overdue-banner-text"></span>
+    <button class="ob-view" onclick="setFolder('bills', document.getElementById('folder-bills'))">View all</button>
     <button class="ob-dismiss" onclick="dismissOverdueBanner()" title="Dismiss">×</button>
   </div>
   <div class="rp-section">
