@@ -620,7 +620,7 @@ function renderOverdueBanner(bills) {
   const n = overdue.length
   const total = overdue.reduce((sum, b) => sum + (b.amount_rm || 0), 0)
   const text = n === 1
-    ? `You have <strong>1</strong> overdue bill — <strong>${overdue[0].biller}</strong>`
+    ? `You have <strong>1</strong> overdue bill — <strong>${escHtml(overdue[0].biller)}</strong>`
     : `You have <strong>${n}</strong> overdue bills`
   const totalStr = total > 0 ? ` — Total <strong>RM${total.toFixed(2)}</strong>` : ''
   document.getElementById('overdue-banner-text').innerHTML = text + totalStr
