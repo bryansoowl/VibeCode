@@ -115,7 +115,7 @@ VibeCode/                         ← git root
 2. Poll `GET /health` every 500ms (up to 20s) until ready
 3. Create `BrowserWindow` (`contextIsolation: true`, `webSecurity: true`, loads `http://localhost:3000`)
 4. Create system tray with `tray-icon.png`
-5. Register `electron-auto-launch` to start InboxMY with Windows
+5. Check `userData/inboxmy-settings.json` for auto-launch preference; if enabled, ensure `electron-auto-launch` is registered (if disabled or unset, ensure it is not registered)
 6. Start the notification scheduler (fires 30s after launch, then every 60 min)
 
 **Window behaviour (BlueMail-style):**
@@ -133,9 +133,13 @@ VibeCode/                         ← git root
 | `navigate-to-bill` | main → renderer | Deep link after notification click |
 | `save-gemini-key` | renderer → main | Encrypt + persist key via `safeStorage` |
 | `get-gemini-key` | renderer → main | Decrypt + return key |
+| `set-auto-launch` | renderer → main | Enable/disable Windows startup via `electron-auto-launch` |
+| `get-auto-launch` | renderer → main | Return current auto-launch enabled state |
 
-**Taskbar badge:**
-- After each scheduler run, call `app.setBadgeCount(n)` where `n` = count of overdue + due-within-3-days bills
+**Taskbar badge (Windows):**
+- `app.setBadgeCount()` is macOS/Linux only — it is a no-op on Windows.
+- On Windows, use `app.setOverlayIcon(badgeImage, description)` where `badgeImage` is an `nativeImage` generated at runtime (a small red circle with the count number drawn via `canvas`). If count is 0, call `app.setOverlayIcon(null, '')` to clear it.
+- After each scheduler run, call `setWindowsBadge(n)` (a helper in `electron/main.js`) with the total alert count.
 
 ### `electron/preload.js`
 
@@ -148,6 +152,8 @@ contextBridge.exposeInMainWorld('inboxmy', {
   onNavigateToBill: (cb) => ipcRenderer.on('navigate-to-bill', (_, billId) => cb(billId)),
   saveGeminiKey:    (key) => ipcRenderer.invoke('save-gemini-key', key),
   getGeminiKey:     () => ipcRenderer.invoke('get-gemini-key'),
+  setAutoLaunch:    (enabled) => ipcRenderer.invoke('set-auto-launch', enabled),
+  getAutoLaunch:    () => ipcRenderer.invoke('get-auto-launch'),
 })
 ```
 
@@ -193,7 +199,17 @@ Runs 30s after app launch, then every 60 minutes:
 6. mainWindow.webContents.send('bill-alert', { overdue, dueSoon })
 ```
 
-**Session cookie:** Electron's `BrowserWindow` session shares cookies with the HTTP requests made via `net.request()`. The scheduler uses `net.request()` (Electron's built-in HTTP client) with the `session` cookie automatically attached — no separate auth flow needed.
+**Session cookie:** The scheduler uses Electron's `net.request()` for all HTTP calls. `net.request()` in the main process does **not** automatically inherit the BrowserWindow's renderer session — the session must be passed explicitly:
+
+```js
+const req = net.request({
+  method: 'PATCH',
+  url: 'http://localhost:3000/api/bills/auto-mark-overdue',
+  session: mainWindow.webContents.session   // must be explicit
+})
+```
+
+**401 handling:** If any scheduler HTTP call returns a 401 (user not logged in, session expired), skip the entire scheduler tick silently — no notifications fired, no error thrown. Log `[scheduler] skipped tick — not authenticated` to console. The scheduler will retry on the next 60-min interval.
 
 ### `notified.json` (deduplication)
 
@@ -285,10 +301,12 @@ Return a JSON array: [{ billId, shouldNotify, title, body }]
 
 ### `POST /api/notifications/ai-summary`
 
+- Sits behind `requireAuth` middleware (same as all `/api/*` routes in `server.ts`)
 - Accepts: `{ bills: BillForNotification[], geminiKey: string }`
 - Calls `notifier.ts`
 - Returns: `NotificationResult[]`
 - The Gemini key is passed per-request from the Electron main process (not stored server-side)
+- **Logging note:** Express must not log request bodies at any level (no `morgan` body logging, no error serialisers that dump `req.body`). The Gemini key in the body must not appear in any log file. The existing server.ts does not log bodies — ensure this is not changed.
 
 ### Gemini Key Storage
 
@@ -306,6 +324,7 @@ AI Notifications
 ─────────────────────────────────────────
 Gemini API Key   [••••••••••••••••] [Save]
 Status           ● Active  (or) ○ Not configured
+Launch at startup  [toggle on/off]
 
 Get a free key at aistudio.google.com
 ```
@@ -313,6 +332,7 @@ Get a free key at aistudio.google.com
 - On "Save": calls `window.inboxmy.saveGeminiKey(key)` → IPC → `safeStorage`
 - On modal open: calls `window.inboxmy.getGeminiKey()` → shows masked value if set
 - "Active" / "Not configured" badge shown based on whether key is present
+- **Launch at startup toggle:** calls `window.inboxmy.setAutoLaunch(enabled)` → IPC → `electron-auto-launch` `.enable()` / `.disable()`. On Settings open, calls `window.inboxmy.getAutoLaunch()` to show current state. This replaces the always-on auto-launch from Section 1 — the startup sequence registers auto-launch only if the user has enabled it (default: off on first install, shown in Settings).
 
 ---
 
@@ -359,23 +379,25 @@ No functional change — the stub stays as-is, comment updated for clarity.
 
 ## File Map
 
+All paths are relative to the repo root (`VibeCode/`). Backend source files are under `inboxmy-backend/src/`; backend tests are under `inboxmy-backend/tests/`.
+
 | File | Action | What changes |
 |---|---|---|
-| `package.json` (root) | **Create** | Electron app package, build config, scripts |
+| `package.json` | **Create** | Root Electron package, build config, scripts |
 | `electron/main.js` | **Create** | Main process: BrowserWindow, tray, scheduler, IPC, notifications |
 | `electron/preload.js` | **Create** | contextBridge: window.inboxmy.* |
 | `electron/assets/tray-icon.png` | **Create** | 16×16 tray icon |
 | `electron/assets/icon.ico` | **Create** | Windows app icon |
-| `src/ai/notifier.ts` | **Create** | Gemini 2.0 Flash integration, fallback copy |
-| `src/routes/notifications.ts` | **Create** | GET /api/notifications/due-soon, POST /api/notifications/ai-summary |
-| `tests/routes/notifications.test.ts` | **Create** | Tests for both new notification endpoints |
-| `tests/ai/notifier.test.ts` | **Create** | Unit tests for notifier (mocked Gemini SDK) |
-| `src/routes/bills.ts` | **Modify** | Add PATCH /api/bills/auto-mark-overdue |
-| `src/server.ts` | **Modify** | Mount notificationsRouter at /api/notifications |
-| `src/scheduler.ts` | **Modify** | Update comment only |
+| `inboxmy-backend/src/ai/notifier.ts` | **Create** | Gemini 2.0 Flash integration, fallback copy |
+| `inboxmy-backend/src/routes/notifications.ts` | **Create** | GET /api/notifications/due-soon, POST /api/notifications/ai-summary |
+| `inboxmy-backend/tests/routes/notifications.test.ts` | **Create** | Tests for both new notification endpoints |
+| `inboxmy-backend/tests/ai/notifier.test.ts` | **Create** | Unit tests for notifier (mocked Gemini SDK) |
+| `inboxmy-backend/src/routes/bills.ts` | **Modify** | Add PATCH /api/bills/auto-mark-overdue |
+| `inboxmy-backend/src/server.ts` | **Modify** | Mount notificationsRouter at /api/notifications |
+| `inboxmy-backend/src/scheduler.ts` | **Modify** | Update comment only |
 | `inboxmy-backend/package.json` | **Modify** | Add @google/generative-ai dependency |
-| `frontend/index.html` | **Modify** | Overdue banner HTML, Settings AI key section |
-| `frontend/app.js` | **Modify** | Banner render logic, key save/load IPC, deep link handler |
+| `frontend/index.html` | **Modify** | Overdue banner HTML, Settings AI key + auto-launch section |
+| `frontend/app.js` | **Modify** | Banner render logic, key save/load IPC, auto-launch toggle, deep link handler |
 | `README.md` | **Modify** | Electron-first docs, business model section |
 | `SETUP.md` | **Modify** | Gemini API key setup instructions |
 
@@ -384,14 +406,34 @@ No functional change — the stub stays as-is, comment updated for clarity.
 ## Testing
 
 ### New test files
-- `tests/routes/notifications.test.ts` — `GET /api/notifications/due-soon` (bills due within 72h returned, overdue returned, paid excluded); `PATCH /api/bills/auto-mark-overdue` (unpaid past due_date → overdue, future bills unchanged, paid bills unchanged)
-- `tests/ai/notifier.test.ts` — Gemini success path returns AI copy; Gemini failure falls back to plain copy; suppresses Shopee promos; always notifies TNB/LHDN
+
+**`inboxmy-backend/tests/routes/notifications.test.ts`**
+- `GET /api/notifications/due-soon`: bills with `due_date` within 72h (inclusive boundary: bill at exactly `now + 72h` is included) are returned
+- `GET /api/notifications/due-soon`: overdue bills (`status = 'overdue'`) are returned
+- `GET /api/notifications/due-soon`: paid bills are excluded
+- `GET /api/notifications/due-soon`: bill with `due_date` at exactly `now` (boundary: past vs. future) — must be returned as overdue
+- `PATCH /api/bills/auto-mark-overdue`: unpaid bill with `due_date < now` → marked `overdue`; returns `{ marked: 1 }`
+- `PATCH /api/bills/auto-mark-overdue`: unpaid bill with `due_date` in the future → unchanged
+- `PATCH /api/bills/auto-mark-overdue`: paid bill with `due_date < now` → unchanged (never re-marks paid)
+- `PATCH /api/bills/auto-mark-overdue`: bill at `due_date = Date.now()` (exact boundary) — must be treated as overdue (`due_date < now` is strict less-than; a bill due exactly now is NOT yet overdue; implement as `due_date <= Date.now() - 1` or use `<` with a 1-minute grace window)
+
+**`inboxmy-backend/tests/ai/notifier.test.ts`**
+- Gemini success path: returns AI copy with `shouldNotify: true` for TNB bill
+- Gemini success path: suppresses Shopee promo (`shouldNotify: false`) per system prompt rules
+- Gemini failure (API throws): falls back to plain copy; all bills have `shouldNotify: true`
+- Gemini returns malformed JSON: falls back to plain copy gracefully
+
+### Deduplication utility (extract for testability)
+The `notified.json` key generation logic (`billId + '_' + YYYY-MM`) must be extracted into a pure utility function `makeNotificationKey(billId, dateMs)` in `electron/main.js` (or a shared `electron/utils.js`). This allows the deduplication boundary to be unit-tested without Electron. Test cases:
+- Same bill, same month → same key (deduplicates)
+- Same bill, different month → different key (re-notifies)
+- Different bills, same month → different keys
 
 ### Modified test files
-- `tests/routes/bills.test.ts` — add test for new `auto-mark-overdue` endpoint
+- `inboxmy-backend/tests/routes/bills.test.ts` — verify existing tests still pass (no changes needed; `auto-mark-overdue` is a new route tested in `notifications.test.ts`)
 
 ### Electron main/preload
-Not unit-tested (Electron E2E is out of scope for MVP). IPC handlers are verified manually.
+Not unit-tested (Electron E2E is out of scope for MVP). IPC handlers verified manually. Deduplication key logic extracted to a pure function and unit-tested as above.
 
 ### Target
 **110+ tests passing** after Plan 6.
@@ -412,7 +454,7 @@ Not unit-tested (Electron E2E is out of scope for MVP). IPC handlers are verifie
   → GET /api/notifications/due-soon
   → (if Gemini key) POST /api/notifications/ai-summary
   → new Notification({ title, body, actions: ['View Bill'] })
-  → app.setBadgeCount(n)
+  → setWindowsBadge(n)  [app.setOverlayIcon() with generated badge image]
   → webContents.send('bill-alert', data)
 
 [User clicks toast]
