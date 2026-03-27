@@ -64,6 +64,7 @@ app.get('/auth/gmail/callback', async (req, res) => {
 
   try {
     const accountId = await gmailCallback(code as string, session.user_id)
+    getDb().prepare('UPDATE accounts SET token_expired = 0 WHERE id = ?').run(accountId)
     res.send(`<script>window.close()</script><p>Gmail connected! Account: ${accountId}</p>`)
   } catch (err: any) {
     res.status(500).send(err.message)
@@ -85,6 +86,7 @@ app.get('/auth/outlook/callback', async (req, res) => {
 
   try {
     const accountId = await outlookCallback(code as string, session.user_id)
+    getDb().prepare('UPDATE accounts SET token_expired = 0 WHERE id = ?').run(accountId)
     res.send(`<script>window.close()</script><p>Outlook connected! Account: ${accountId}</p>`)
   } catch (err: any) {
     res.status(500).send(err.message)
