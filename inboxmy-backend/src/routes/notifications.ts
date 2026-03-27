@@ -1,6 +1,8 @@
 // src/routes/notifications.ts
 import { Router } from 'express'
 import { getDb } from '../db'
+import { getNotifications } from '../ai/notifier'
+import type { BillForNotification } from '../ai/notifier'
 
 export const notificationsRouter = Router()
 
@@ -29,4 +31,22 @@ notificationsRouter.get('/due-soon', (req, res) => {
   `).all(user.id, now, window72h)
 
   res.json({ bills: rows })
+})
+
+// POST /api/notifications/ai-summary
+// Accepts bills array + Gemini key, returns NotificationResult[].
+// Key is passed per-request and never stored server-side.
+// SECURITY: Do not add any body logging middleware — key must not appear in logs.
+notificationsRouter.post('/ai-summary', async (req, res) => {
+  const { bills, geminiKey } = req.body
+  if (!Array.isArray(bills) || typeof geminiKey !== 'string' || !geminiKey.trim()) {
+    return res.status(400).json({ error: 'bills (array) and geminiKey (string) required' })
+  }
+
+  try {
+    const results = await getNotifications(bills as BillForNotification[], geminiKey)
+    res.json(results)
+  } catch {
+    res.status(500).json({ error: 'Notification generation failed' })
+  }
 })

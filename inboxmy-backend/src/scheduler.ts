@@ -1,7 +1,6 @@
 // src/scheduler.ts
-// NOTE: Per-user sync requires a user's dataKey which is only available during
-// an authenticated request. Background sync is disabled in Plan 4 pending a
-// service-account re-auth pattern in a future plan.
+// Background scheduling has moved to electron/main.js (Plan 6).
+// This stub is retained so server.ts compiles without changes.
 export function startScheduler(): void {
-  console.log('[scheduler] Background sync disabled (Plan 4 — requires per-user dataKey)')
+  console.log('[scheduler] Background sync disabled — scheduling handled by Electron main process (Plan 6)')
 }
