@@ -84,11 +84,15 @@ export async function syncAccount(
 
     syncAll(emails)
 
-    db.prepare('UPDATE accounts SET last_synced = ? WHERE id = ?').run(Date.now(), accountId)
+    db.prepare('UPDATE accounts SET last_synced = ?, token_expired = 0 WHERE id = ?').run(Date.now(), accountId)
     db.prepare('UPDATE sync_log SET finished_at = ?, emails_added = ? WHERE id = ?')
       .run(Date.now(), added, logId)
 
   } catch (err: any) {
+    const AUTH_ERRORS = /invalid_grant|401|token has been expired or revoked|unauthorized|re-auth required/i
+    if (AUTH_ERRORS.test(err.message)) {
+      db.prepare('UPDATE accounts SET token_expired = 1 WHERE id = ?').run(accountId)
+    }
     errors.push(err.message)
     db.prepare('UPDATE sync_log SET finished_at = ?, error = ? WHERE id = ?')
       .run(Date.now(), err.message, logId)
