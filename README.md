@@ -634,9 +634,16 @@ Completed so far:
   reset-password with key re-wrap, requireAuth middleware on all API routes, OAuth state relay,
   frontend auth.html login/signup page, sign-out button. 3 test files. 71 tests total passing.
 
-Today's goal is Plan 5: Account Management UI.
-Add rename, delete + revoke, re-auth for expired tokens, and per-account sync status to the accounts panel.
-The backend PATCH /api/accounts/:id/label and DELETE /api/accounts/:id routes already exist — Plan 5 wires
-them into the frontend with proper UI (inline rename, confirm-delete modal, sync status badge).
-See docs/superpowers/specs/ for the design spec once it is written.
+Today's goal is implementing Plan 5: Account Management UI.
+The design spec is at docs/superpowers/specs/2026-03-27-plan5-account-management-ui-design.md
+The implementation plan is at docs/superpowers/plans/2026-03-27-plan5-account-management-ui.md
+
+Key decisions already made:
+- All management controls live in the Settings modal only (sidebar stays clean)
+- Rename via pencil icon → input + Save/Cancel (Enter/Escape supported)
+- Delete via extended openConfirm() simple mode (no type-DELETE required)
+- token_expired column added via Migration 5; set by sync engine on auth errors, cleared on reconnect
+- GET /api/accounts exposes token_expired; red re-auth badge shown when = 1
+
+Do NOT break existing UI. Enhance only. Use the writing-plans skill to review the spec, then implement.
 ```
