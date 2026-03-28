@@ -347,6 +347,7 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
     <span id="sync-status" style="font-size:11px;color:var(--ink4)"></span>
     <button class="tb-lang active" id="lang-en" onclick="setLang('en')">EN</button>
     <button class="tb-lang" id="lang-bm" onclick="setLang('bm')">BM</button>
+    <span id="unread-badge" class="sb-badge" style="display:none;cursor:default" title="Unread emails"></span>
     <div class="profile-wrap">
       <div class="tb-avatar" id="tb-avatar" onclick="toggleProfileMenu()" title="Account">A</div>
       <div class="profile-dropdown" id="profile-dropdown">
@@ -583,6 +584,16 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
             <input type="checkbox" id="auto-launch-toggle" onchange="toggleAutoLaunch(this.checked)" />
             Launch InboxMY at Windows startup
           </label>
+        </div>
+
+        <div class="settings-field" id="notif-toggle-field">
+          <label>
+            <input type="checkbox" id="notif-toggle" onchange="handleNotifToggle(this.checked)" />
+            Email notifications (new email toasts + sound)
+          </label>
+          <div id="notif-off-label" style="display:none; color: var(--coral); font-size: 0.85rem; margin-top: 4px;">
+            Notifications are off
+          </div>
         </div>
       </div>
 
