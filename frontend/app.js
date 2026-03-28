@@ -37,6 +37,25 @@ document.addEventListener('click', e => {
 // ── CONFIG ──────────────────────────────────────────────────────────────────
 const API = '';  // same-origin: Express serves frontend at localhost:3001
 
+// ── UNREAD BADGE ─────────────────────────────────────────────────────────────
+let unreadCount = 0
+
+async function refreshUnreadCount() {
+  try {
+    const data = await apiFetch('/api/emails/unread-count')
+    unreadCount = data.count
+    renderUnreadBadge()
+  } catch { /* silent — badge stays at last known value */ }
+}
+
+function renderUnreadBadge() {
+  const el = document.getElementById('unread-badge')
+  if (!el) return
+  if (unreadCount <= 0) { el.style.display = 'none'; return }
+  el.textContent = unreadCount > 99 ? '99+' : String(unreadCount)
+  el.style.display = ''
+}
+
 // ── API CLIENT ───────────────────────────────────────────────────────────────
 async function apiFetch(path, options = {}) {
   let res;
@@ -398,6 +417,19 @@ async function selectEmail(id) {
         if (curr > 1) badge.textContent = String(curr - 1);
         else badge.textContent = '';
       }
+      // Decrement the relevant category badge
+      const catBadgeMap = { bill: 'badge-bills', govt: 'badge-govt', receipt: 'badge-receipts', work: 'badge-work' };
+      const catBadgeId = catBadgeMap[email.category];
+      if (catBadgeId) {
+        const catBadge = document.getElementById(catBadgeId);
+        if (catBadge) {
+          const curr = parseInt(catBadge.textContent) || 0;
+          if (curr > 1) catBadge.textContent = String(curr - 1);
+          else catBadge.textContent = '';
+        }
+      }
+      unreadCount = Math.max(0, unreadCount - 1)
+      renderUnreadBadge()
     }
   } catch (err) {
     document.getElementById('ed-subject').textContent = 'Failed to load email';
@@ -724,7 +756,7 @@ function renderBillsPanel(bills, orders = []) {
 
     const el = document.createElement('div');
     el.className = 'bill-item';
-    el.setAttribute('data-bill-id', b.id)
+    el.setAttribute('data-bill-id', bill.id)
     el.title = 'Click to open email';
     el.innerHTML = `
       <div class="bi-icon">${getBillerIcon(bill.biller)}</div>
@@ -762,10 +794,10 @@ async function loadCategoryBadges() {
   try {
     const [inboxUnread, bills, govt, receipts, work, important, promotions, sent, draft, spam] = await Promise.all([
       fetchEmails({ folder: 'inbox',   unread: true, limit: 1, offset: 0 }),  // inbox unread (excl. promos)
-      fetchEmails({ category: 'bill',               limit: 1, offset: 0 }),
-      fetchEmails({ category: 'govt',               limit: 1, offset: 0 }),
-      fetchEmails({ category: 'receipt',            limit: 1, offset: 0 }),
-      fetchEmails({ category: 'work',               limit: 1, offset: 0 }),
+      fetchEmails({ category: 'bill',    unread: true, limit: 1, offset: 0 }),
+      fetchEmails({ category: 'govt',    unread: true, limit: 1, offset: 0 }),
+      fetchEmails({ category: 'receipt', unread: true, limit: 1, offset: 0 }),
+      fetchEmails({ category: 'work',    unread: true, limit: 1, offset: 0 }),
       fetchEmails({ important: '1',                 limit: 1, offset: 0 }),
       fetchEmails({ tab: 'promotions',              limit: 1, offset: 0 }),
       fetchEmails({ folder: 'sent',                 limit: 1, offset: 0 }),
@@ -874,10 +906,27 @@ async function toggleAutoLaunch(enabled) {
   showToast(enabled ? 'InboxMY will launch at Windows startup' : 'Auto-launch disabled')
 }
 
+async function loadNotifSettings() {
+  if (!window.inboxmy) return
+  const enabled = await window.inboxmy.getNotifPref().catch(() => true)
+  const toggle = document.getElementById('notif-toggle')
+  const offLabel = document.getElementById('notif-off-label')
+  if (toggle) toggle.checked = enabled
+  if (offLabel) offLabel.style.display = enabled ? 'none' : ''
+}
+
+async function handleNotifToggle(enabled) {
+  if (!window.inboxmy) return
+  await window.inboxmy.setNotifPref(enabled)
+  const offLabel = document.getElementById('notif-off-label')
+  if (offLabel) offLabel.style.display = enabled ? 'none' : ''
+}
+
 function openSettings() {
   document.getElementById('profile-dropdown').classList.remove('open');
   renderSettingsAccounts();
   loadAISettings()
+  loadNotifSettings()
   document.getElementById('settings-modal').classList.add('open');
 }
 function closeSettings() {
@@ -1102,6 +1151,18 @@ if (window.inboxmy) {
     }
   })
 
+  // Background sync completed — silently refresh email list + badges
+  window.inboxmy.onSyncComplete(function() {
+    loadEmails(true)
+    loadCategoryBadges()
+    refreshUnreadCount()
+  })
+
+  window.inboxmy.onNewEmails(({ unreadCount: count }) => {
+    unreadCount = count
+    renderUnreadBadge()
+  })
+
   // Deep link: toast click → navigate to specific bill
   window.inboxmy.onNavigateToBill(function(billId) {
     // Switch to bills folder
@@ -1120,6 +1181,18 @@ if (window.inboxmy) {
   })
 }
 
+// ── BACKGROUND SYNC POLL ─────────────────────────────────────────────────────
+// Silently syncs every 60 seconds and refreshes the email list if new emails
+// were added. Uses Gmail History API on the backend so it's cheap (1 API call
+// per poll when nothing is new).
+async function backgroundSyncPoll() {
+  try {
+    await triggerSync();
+    loadEmails(true);
+    loadCategoryBadges();
+  } catch { /* non-critical — ignore failures */ }
+}
+
 // ── INIT ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   setupInfiniteScroll();
@@ -1128,5 +1201,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadEmails(true),
     loadBills(),
     loadCategoryBadges(),
+    refreshUnreadCount(),
   ]);
+
+  // Start background poll — 60 s interval for near-real-time inbox updates
+  setInterval(backgroundSyncPoll, 60_000);
 });
