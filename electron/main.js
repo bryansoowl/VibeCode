@@ -166,7 +166,7 @@ function createTray() {
 async function runSyncTick() {
   if (!mainWindow || mainWindow.isDestroyed()) return
   const winSession = mainWindow.webContents.session
-  await new Promise((resolve) => {
+  const body = await new Promise((resolve) => {
     const payload = '{}'
     const req = net.request({
       url: `${BACKEND_URL}/api/sync/trigger`,
@@ -174,15 +174,78 @@ async function runSyncTick() {
       session: winSession,
     })
     req.on('response', (res) => {
-      res.on('data', () => {})  // drain response
-      res.on('end', resolve)
+      let buf = ''
+      res.on('data', (chunk) => { buf += chunk })
+      res.on('end', () => resolve(buf))
     })
-    req.on('error', () => resolve())
+    req.on('error', () => resolve(''))
     req.setHeader('Content-Type', 'application/json')
     req.setHeader('Content-Length', Buffer.byteLength(payload))
     req.write(payload)
     req.end()
-  }).catch(() => {})
+  }).catch(() => '')
+
+  let syncResult = {}
+  try { syncResult = JSON.parse(body) } catch { /* parse failed — skip notifications */ }
+
+  const { added = 0, emails = [] } = syncResult
+
+  // Fire email arrival toasts (only when notifications are enabled)
+  if (added > 0 && emailNotifEnabled) {
+    const emailNotified = loadEmailNotified()
+    const fresh = emails.filter((e) => !emailNotified[e.id])
+
+    if (fresh.length > 0) {
+      const icon = path.join(__dirname, 'assets', 'icon.png')
+      if (fresh.length <= 3) {
+        for (const e of fresh) {
+          new Notification({
+            title: e.senderName ?? e.sender,
+            body: e.subject.slice(0, 100),
+            icon,
+          }).show()
+        }
+      } else {
+        const accountCount = new Set(fresh.map((e) => e.accountId)).size
+        new Notification({
+          title: 'InboxMY',
+          body: `${fresh.length} new emails across ${accountCount} account(s)`,
+          icon,
+        }).show()
+      }
+
+      for (const e of fresh) emailNotified[e.id] = true
+      saveEmailNotified(emailNotified)
+    }
+  }
+
+  // Fetch authoritative unread count → update taskbar badge + send to renderer
+  if (added > 0 && mainWindow && !mainWindow.isDestroyed()) {
+    await new Promise((resolve) => {
+      const req2 = net.request({
+        url: `${BACKEND_URL}/api/emails/unread-count`,
+        method: 'GET',
+        session: winSession,
+      })
+      req2.on('response', (res) => {
+        let buf2 = ''
+        res.on('data', (c) => { buf2 += c })
+        res.on('end', () => {
+          try {
+            const unreadCount = JSON.parse(buf2).count ?? 0
+            setWindowsBadge(mainWindow, unreadCount)
+            if (!mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('new-emails', { added, unreadCount })
+            }
+          } catch {}
+          resolve()
+        })
+      })
+      req2.on('error', () => resolve())
+      req2.end()
+    }).catch(() => {})
+  }
+
   // Tell the renderer to refresh its email list after background sync
   if (!mainWindow.isDestroyed()) {
     mainWindow.webContents.send('sync-complete')
