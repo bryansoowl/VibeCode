@@ -10,10 +10,18 @@ import type { NormalizedEmail } from './types'
 
 const AUTH_ERRORS = /invalid_grant|\b401\b|token has been expired or revoked|\bunauthorized\b|re-auth required/i
 
+export interface NewEmailSummary {
+  id: string
+  sender: string
+  senderName: string | null
+  subject: string   // plaintext from NormalizedEmail.subject before encryption, max 200 chars
+  accountId: string
+}
+
 export async function syncAccount(
   accountId: string,
   dataKey: Buffer
-): Promise<{ added: number; errors: string[] }> {
+): Promise<{ added: number; errors: string[]; newEmails: NewEmailSummary[] }> {
   const db = getDb()
   const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(accountId) as any
   if (!account) throw new Error(`Account ${accountId} not found`)
@@ -24,13 +32,24 @@ export async function syncAccount(
 
   const errors: string[] = []
   let added = 0
+  const newEmails: NewEmailSummary[] = []
 
   try {
     const sinceMs = account.last_synced ?? null
+    const historyId = account.gmail_history_id ?? null
     console.log(`[sync] Fetching emails for ${account.email} (${account.provider})…`)
-    const emails: NormalizedEmail[] = account.provider === 'gmail'
-      ? await fetchGmail(accountId, sinceMs)
-      : await fetchOutlook(accountId, sinceMs)
+
+    let emails: NormalizedEmail[]
+    let newHistoryId: string | null = null
+
+    if (account.provider === 'gmail') {
+      const result = await fetchGmail(accountId, sinceMs, historyId)
+      emails = result.emails
+      newHistoryId = result.newHistoryId
+    } else {
+      emails = await fetchOutlook(accountId, sinceMs)
+    }
+
     console.log(`[sync] Fetched ${emails.length} emails, processing…`)
 
     const insertEmail = db.prepare(`
@@ -50,11 +69,8 @@ export async function syncAccount(
         const parsed = parseEmail(email)
         const body = email.bodyHtml ?? email.bodyText ?? ''
 
-        // Apply InboxMY spam scorer on top of Gmail's own detection.
-        // Only promotes inbox emails to spam — never demotes confirmed spam.
         const spamResult = scoreSpam(email)
         const finalFolder = spamResult.isSpam ? 'spam' : (email.folder ?? 'inbox')
-        // Spam emails get no tab (they're not inbox tabs)
         const finalTab    = finalFolder === 'spam' ? 'primary' : (email.tab ?? 'primary')
 
         const result = insertEmail.run(
@@ -73,6 +89,13 @@ export async function syncAccount(
 
         if (result.changes > 0) {
           added++
+          newEmails.push({
+            id: email.id,
+            sender: email.sender,
+            senderName: email.senderName ?? null,
+            subject: (email.subject ?? '').slice(0, 200),
+            accountId,
+          })
           if (parsed.bill?.amountRm != null || parsed.bill?.dueDateMs != null) {
             insertBill.run(
               randomUUID(), email.id, parsed.bill.biller,
@@ -86,11 +109,17 @@ export async function syncAccount(
 
     syncAll(emails)
 
-    db.prepare('UPDATE accounts SET last_synced = ?, token_expired = 0 WHERE id = ?').run(Date.now(), accountId)
+    db.prepare(
+      'UPDATE accounts SET last_synced = ?, token_expired = 0, gmail_history_id = COALESCE(?, gmail_history_id) WHERE id = ?'
+    ).run(Date.now(), newHistoryId, accountId)
+
     db.prepare('UPDATE sync_log SET finished_at = ?, emails_added = ? WHERE id = ?')
       .run(Date.now(), added, logId)
 
+    if (added > 0) console.log(`[sync] Done — added ${added} emails`)
+
   } catch (err: any) {
+    console.error(`[sync] Error for ${accountId}:`, err.message)
     if (AUTH_ERRORS.test(err.message)) {
       db.prepare('UPDATE accounts SET token_expired = 1 WHERE id = ?').run(accountId)
     }
@@ -99,7 +128,7 @@ export async function syncAccount(
       .run(Date.now(), err.message, logId)
   }
 
-  return { added, errors }
+  return { added, errors, newEmails }
 }
 
 export async function syncAllAccounts(userId: string, dataKey: Buffer): Promise<void> {

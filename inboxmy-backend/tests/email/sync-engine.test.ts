@@ -77,3 +77,94 @@ describe('syncAccount — token_expired flag', () => {
     expect(row.token_expired).toBe(1)
   })
 })
+
+describe('syncAccount — newEmails return', () => {
+  beforeEach(() => { vi.resetAllMocks() })
+
+  it('returns newEmails with plaintext subject and sender for each newly inserted email', async () => {
+    const id = randomUUID()
+    seedAccount(id, 'gmail')
+
+    const email: import('../../src/email/types').NormalizedEmail = {
+      id: randomUUID(),
+      accountId: id,
+      threadId: null,
+      subject: 'Your TNB bill is ready',
+      sender: 'billing@tnb.com.my',
+      senderName: 'TNB Billing',
+      receivedAt: Date.now(),
+      isRead: false,
+      folder: 'inbox',
+      tab: 'primary',
+      isImportant: false,
+      category: 'bill',
+      bodyHtml: null,
+      bodyText: null,
+      snippet: null,
+      rawSize: 100,
+    }
+
+    vi.mocked(mockGmailFetch).mockResolvedValue({ emails: [email], newHistoryId: null })
+
+    const result = await syncAccount(id, TEST_KEY)
+
+    expect(result.added).toBe(1)
+    expect(result.newEmails).toHaveLength(1)
+    expect(result.newEmails[0].id).toBe(email.id)
+    expect(result.newEmails[0].sender).toBe('billing@tnb.com.my')
+    expect(result.newEmails[0].senderName).toBe('TNB Billing')
+    expect(result.newEmails[0].subject).toBe('Your TNB bill is ready')
+    expect(result.newEmails[0].accountId).toBe(id)
+  })
+
+  it('returns empty newEmails when no new emails are fetched', async () => {
+    const id = randomUUID()
+    seedAccount(id, 'gmail')
+    vi.mocked(mockGmailFetch).mockResolvedValue({ emails: [], newHistoryId: null })
+
+    const result = await syncAccount(id, TEST_KEY)
+
+    expect(result.added).toBe(0)
+    expect(result.newEmails).toHaveLength(0)
+  })
+
+  it('does not include duplicate emails in newEmails on second sync', async () => {
+    const id = randomUUID()
+    seedAccount(id, 'gmail')
+
+    const email: import('../../src/email/types').NormalizedEmail = {
+      id: randomUUID(), accountId: id, threadId: null,
+      subject: 'Duplicate test', sender: 'a@b.com', senderName: null,
+      receivedAt: Date.now(), isRead: false, folder: 'inbox', tab: 'primary',
+      isImportant: false, category: null, bodyHtml: null, bodyText: null,
+      snippet: null, rawSize: 50,
+    }
+
+    vi.mocked(mockGmailFetch).mockResolvedValue({ emails: [email], newHistoryId: null })
+    await syncAccount(id, TEST_KEY)       // first sync — inserts
+
+    vi.mocked(mockGmailFetch).mockResolvedValue({ emails: [email], newHistoryId: null })
+    const result = await syncAccount(id, TEST_KEY)   // second sync — INSERT OR IGNORE skips it
+
+    expect(result.added).toBe(0)
+    expect(result.newEmails).toHaveLength(0)
+  })
+
+  it('slices subject to 200 chars', async () => {
+    const id = randomUUID()
+    seedAccount(id, 'gmail')
+
+    const longSubject = 'A'.repeat(300)
+    const email: import('../../src/email/types').NormalizedEmail = {
+      id: randomUUID(), accountId: id, threadId: null, subject: longSubject,
+      sender: 'a@b.com', senderName: null, receivedAt: Date.now(), isRead: false,
+      folder: 'inbox', tab: 'primary', isImportant: false, category: null,
+      bodyHtml: null, bodyText: null, snippet: null, rawSize: 50,
+    }
+
+    vi.mocked(mockGmailFetch).mockResolvedValue({ emails: [email], newHistoryId: null })
+    const result = await syncAccount(id, TEST_KEY)
+
+    expect(result.newEmails[0].subject).toHaveLength(200)
+  })
+})
