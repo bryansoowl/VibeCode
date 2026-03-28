@@ -61,7 +61,7 @@ describe('syncAccount — token_expired flag', () => {
     const id = randomUUID()
     seedAccount(id, 'gmail')
     getDb().prepare('UPDATE accounts SET token_expired = 1 WHERE id = ?').run(id)
-    vi.mocked(mockGmailFetch).mockResolvedValue([])
+    vi.mocked(mockGmailFetch).mockResolvedValue({ emails: [], newHistoryId: null })
     await syncAccount(id, TEST_KEY)
     const row = getDb().prepare('SELECT token_expired FROM accounts WHERE id = ?').get(id) as any
     expect(row.token_expired).toBe(0)

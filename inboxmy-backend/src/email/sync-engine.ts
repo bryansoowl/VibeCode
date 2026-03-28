@@ -65,6 +65,7 @@ export async function syncAccount(
     `)
 
     const syncAll = db.transaction((emails: NormalizedEmail[]) => {
+      const staged: NewEmailSummary[] = []
       for (const email of emails) {
         const parsed = parseEmail(email)
         const body = email.bodyHtml ?? email.bodyText ?? ''
@@ -89,7 +90,7 @@ export async function syncAccount(
 
         if (result.changes > 0) {
           added++
-          newEmails.push({
+          staged.push({
             id: email.id,
             sender: email.sender,
             senderName: email.senderName ?? null,
@@ -105,9 +106,11 @@ export async function syncAccount(
           }
         }
       }
+      return staged
     })
 
-    syncAll(emails)
+    const staged = syncAll(emails)
+    newEmails.push(...staged)
 
     db.prepare(
       'UPDATE accounts SET last_synced = ?, token_expired = 0, gmail_history_id = COALESCE(?, gmail_history_id) WHERE id = ?'
