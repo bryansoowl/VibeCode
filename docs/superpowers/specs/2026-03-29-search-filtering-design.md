@@ -158,6 +158,8 @@ File: `inboxmy-backend/src/routes/emails.test.ts` (extend existing file)
 - `search` matches on decrypted snippet.
 - `search` + `dateFrom`/`dateTo` combined narrows results correctly.
 - 2000-row candidate cap: with >2000 candidates, `limit`/`offset` still returns the correct page slice.
+- 2000-row candidate cap: `total` in the response reflects the in-memory filtered count (≤2000), not the raw DB row count.
+- `search` + `accountIds` combined narrows results to matching emails in the specified accounts only.
 
 ### Frontend (manual smoke test checklist)
 
