@@ -80,6 +80,17 @@ emailsRouter.get('/', (req: Request, res: Response) => {
   }
 })
 
+emailsRouter.get('/unread-count', (req: Request, res: Response) => {
+  const user = (req as any).user
+  const db = getDb()
+  const row = db.prepare(`
+    SELECT COUNT(*) as count FROM emails e
+    JOIN accounts a ON a.id = e.account_id
+    WHERE a.user_id = ? AND e.is_read = 0 AND e.folder = 'inbox' AND e.tab != 'promotions'
+  `).get(user.id) as { count: number }
+  res.json({ count: row.count })
+})
+
 emailsRouter.get('/:id', (req: Request, res: Response) => {
   const user = (req as any).user
   const db = getDb()
