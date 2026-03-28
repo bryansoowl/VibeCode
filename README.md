@@ -1,415 +1,121 @@
 # InboxMY
 
-A privacy-first, locally-priced unified email dashboard for Malaysia. Aggregates up to 6 Gmail/Outlook accounts with smart local filtering — pre-trained to recognise Malaysian bill formats, LHDN emails, MySejahtera, and e-commerce receipts.
+A privacy-first, locally-priced unified email dashboard for Malaysia. Runs as an **Electron desktop app** — no browser needed, no cloud, no telemetry.
 
-All email data is stored **encrypted on your own machine**. Nothing is sent to any cloud.
-
----
-
-## Completed Tasks
-
-### Task 1 — Backend (Done)
-Full Express + TypeScript backend with encrypted SQLite storage, OAuth for Gmail and Outlook, email sync engine, Malaysian bill parsers, and a REST API. 32 tests passing.
-
-### Task 2 — Frontend Wiring (Done)
-Connected the dashboard (`frontend/index.html`) to the live backend API using vanilla JavaScript. All panels — email list, email detail, accounts, bills, sync — are now wired to real data. No build step, no framework.
+Aggregates Gmail and Outlook accounts, parses Malaysian bills (TNB, Unifi, Maxis/Celcom/Digi, Touch 'n Go, LHDN, Shopee, Lazada), and stores everything AES-256-GCM encrypted in a local SQLite database on your device.
 
 ---
 
-## What's Built
+## Features
 
-| Layer | Files | Details |
-|---|---|---|
-| Crypto | `src/crypto.ts`, `src/config.ts` | AES-256-GCM encryption — all email bodies, subjects, and tokens encrypted at rest |
-| Database | `src/db/index.ts`, `migrations.ts` | SQLite with WAL mode, versioned migrations |
-| Auth | `src/auth/gmail.ts`, `outlook.ts`, `token-store.ts` | OAuth2 for Gmail + Outlook, tokens stored encrypted |
-| Email fetch | `src/email/gmail-client.ts`, `outlook-client.ts` | Gmail API + Microsoft Graph, normalised to shared type |
-| Parsers | `src/parsers/` (11 files) | TNB, Unifi, Celcom/Maxis/Digi, Touch 'n Go, LHDN, MySejahtera, Shopee, Lazada + generic RM extractor |
-| Sync engine | `src/email/sync-engine.ts` | Multi-account sync, runs parsers, writes emails + bills atomically |
-| REST API | `src/routes/` (4 files) | `/api/accounts`, `/api/emails`, `/api/bills`, `/api/sync` |
-| Server | `src/server.ts` | Express, bound to `127.0.0.1` only, rate-limited, serves frontend statically |
-| Scheduler | `src/scheduler.ts` | node-cron, syncs all accounts every 15 min |
-| Frontend API client | `frontend/app.js` | Vanilla JS — fetches all panels from the backend API, infinite scroll, error handling |
-| Dashboard | `frontend/index.html` | Full email dashboard — accounts, email list, email detail, bills panel, sync button |
-| Landing page | `frontend/landing.html` | Marketing/info landing page |
+- **Unified inbox** — up to 6 Gmail + Outlook accounts in one view
+- **Bill detection + overdue tracking** — Malaysian bill parsers, overdue banner, due-date countdown
+- **Windows toast notifications** — background scheduler fires every 60 min; AI-generated copy via Gemini 2.0 Flash (optional, user supplies own key)
+- **System tray** — app runs in the background, accessible from the taskbar tray
+- **Auto-launch at startup** — optional, toggleable in Settings
+- **Deep link navigation** — clicking a toast jumps directly to that bill in the app
+- **Privacy** — all data stored locally; API bound to `127.0.0.1`; no telemetry; no InboxMY servers
 
 ---
 
-## Prerequisites
+## Installation
 
-Before you start, make sure you have:
-
-- **Node.js 20 or newer** — check with `node --version`
-- **A Google Cloud project** with the Gmail API enabled (for Gmail OAuth)
-- **A Microsoft Azure app registration** (for Outlook OAuth)
-
-You do NOT need to set up Google/Microsoft credentials to run and test locally — the app starts and the dashboard loads fine without them. You only need credentials when you want to actually connect a real email account.
-
----
-
-## Step 1 — First-Time Setup
-
-Run these steps once. After that, you only need `npm run build && npm start` to run the app.
-
-**Open a terminal (PowerShell or Command Prompt) and run:**
-
-```powershell
-# Navigate to the backend folder
-cd C:\Users\bryan.GOAT\Downloads\VibeCode\inboxmy-backend
-
-# Install all dependencies
+```bash
+# From the repo root
 npm install
-```
-
-**Create your `.env` file by running the setup wizard:**
-
-```powershell
-npm run setup
-```
-
-The wizard will:
-- Auto-generate a secure `ENCRYPTION_KEY` for you
-- Walk you through Google Cloud setup (for Gmail) and/or Azure Portal setup (for Outlook)
-- Write a complete `.env` file — you never need to edit it manually
-
-> For the full step-by-step credential guide (every click in Google Cloud Console and Azure Portal), see [SETUP.md](./SETUP.md).
-
----
-
-## Step 2 — Build the Backend
-
-The backend is written in TypeScript and must be compiled to JavaScript before running. You only need to do this once, and again any time the backend source code changes.
-
-```powershell
-cd C:\Users\bryan.GOAT\Downloads\VibeCode\inboxmy-backend
-
-npm run build
-```
-
-Expected output:
-```
-> inboxmy-backend@1.0.0 build
-> tsc
-```
-
-No errors, no output — a silent exit means success. This creates the `dist/` folder containing compiled JavaScript files.
-
----
-
-## Step 3 — Start the App
-
-```powershell
-cd C:\Users\bryan.GOAT\Downloads\VibeCode\inboxmy-backend
-
 npm start
 ```
 
-Expected output:
+`npm start` launches the Electron app. The backend (Express + SQLite) is spawned automatically as a child process — no separate terminal needed.
+
+> **First run:** The app will start but no accounts are connected yet. Open Settings (gear icon) to add Gmail or Outlook accounts. See [SETUP.md](./SETUP.md) for the full OAuth credential guide.
+
+---
+
+## Development
+
+To run the backend and Electron together with live TypeScript compilation:
+
+```bash
+npm run electron:dev
 ```
-InboxMY backend running on http://localhost:3001
-Scheduler started — syncing every 15 minutes
+
+This rebuilds the backend TypeScript on each change and restarts Electron.
+
+To run only the backend (headless, for API testing):
+
+```bash
+cd inboxmy-backend
+npm run build && npm start
 ```
 
-The app is now running. **Leave this terminal window open** — closing it stops the server.
+---
 
-Open your browser and go to:
+## Building a Windows Installer
 
-| URL | What you see |
+```bash
+npm run dist
+```
+
+Produces a Windows installer (`dist/InboxMY Setup x.x.x.exe`) using `electron-builder`. Requires the backend to have been compiled (`inboxmy-backend/dist/`) before running.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
 |---|---|
-| `http://localhost:3001` | The email dashboard |
-| `http://localhost:3001/landing.html` | The landing/marketing page |
-| `http://localhost:3001/health` | `{"ok":true}` — confirms the server is alive |
+| Desktop shell | Electron 31 |
+| Backend | Node.js / Express (TypeScript) |
+| Database | better-sqlite3 (SQLite, WAL mode, AES-256-GCM encrypted) |
+| AI notifications | @google/generative-ai — Gemini 2.0 Flash |
+| Frontend | Vanilla JS SPA served by Express |
+| Auth | OAuth 2.0 — Gmail API + Microsoft Graph |
 
 ---
 
-## Multi-User Architecture
+## Testing
 
-InboxMY Plan 4 adds full user authentication and per-user data isolation.
+### Backend tests (110 tests)
 
-### How it works
-
-- **Sign up** at `/auth` with your email and a password (min 8 characters)
-- **Your data is encrypted** with a 256-bit key that only your password can unlock — the server cannot read your emails or bills without it
-- **Sessions persist** until you click Sign Out (30-day absolute TTL as a safety net)
-- **Password reset** sends a time-limited link to your email; if SMTP is not configured, the link is printed to the server console
-
-### New environment variables (auto-generated by `npm run setup`)
-
-| Variable | Description |
-|----------|-------------|
-| `SESSION_SECRET` | Encrypts the data key stored in session rows |
-| `RECOVERY_SECRET` | Wraps the data key for password reset — keep this secret |
-| `APP_URL` | Public URL for reset links (e.g. `https://inboxmy.my`) |
-| `SMTP_HOST` | SMTP server for password reset emails (optional) |
-| `SMTP_PORT` | SMTP port (default 587) |
-| `SMTP_USER` | SMTP username |
-| `SMTP_PASS` | SMTP password |
-
-Run `npm run setup` from `inboxmy-backend/` to regenerate all secrets and configure SMTP.
-
----
-
-## Step 4 — Connect a Gmail Account
-
-> **Before this step:** Make sure your Google Cloud OAuth app is set to **External** user type (not Internal). See the section below on Google Cloud setup.
-
-1. With the server running, open your browser and go to:
-   ```
-   http://localhost:3001/api/accounts/connect/gmail
-   ```
-2. You will be redirected to Google's OAuth consent screen.
-3. Sign in with your Gmail account and grant the requested permissions (`gmail.readonly` + email info).
-4. After approving, Google redirects you back to `http://localhost:3001/auth/gmail/callback`.
-5. The server saves your encrypted OAuth token to the local database.
-6. You are redirected to the dashboard at `http://localhost:3001`.
-
-To connect an Outlook account instead:
-```
-http://localhost:3001/api/accounts/connect/outlook
-```
-
-After connecting, the app automatically syncs your emails in the background.
-
----
-
-## Step 5 — Trigger a Manual Sync
-
-After connecting an account, trigger a sync to fetch your emails immediately:
-
-1. Open the dashboard at `http://localhost:3001`
-2. Click the **↻ Sync** button in the top-right of the topbar
-3. The button shows "↻ Syncing…" while working
-4. When done: a "Sync complete!" toast appears and all panels refresh
-5. The last-synced time appears next to the Sync button
-
-Or trigger a sync via the API directly:
-```powershell
-# Sync all accounts
-curl -X POST http://localhost:3001/api/sync/trigger
-
-# Sync a specific account (replace ACCOUNT_ID with the real ID)
-curl -X POST http://localhost:3001/api/sync/trigger -H "Content-Type: application/json" -d "{\"accountId\":\"ACCOUNT_ID\"}"
-```
-
-The scheduler also runs automatically every 15 minutes while the server is running.
-
----
-
-## Step 6 — Using the Dashboard
-
-Once emails are synced, here is how each part of the dashboard works:
-
-**Sidebar — Folder navigation**
-- Click `All inbox`, `Bills`, `Government`, `Receipts`, `Work` to filter the email list by category
-- Click any connected account name to filter emails by that account only
-- Click `All accounts` to see emails from all accounts
-
-**Email list (centre column)**
-- Emails load from the API and scroll infinitely (50 at a time)
-- Use the tab filters at the top: `All`, `Unread`, `Bills`, `Govt`, `Receipts`
-- Use the search bar at the top to search by sender name
-- Click any email row to open it in the detail pane
-
-**Email detail (right of email list)**
-- Shows the decrypted email subject, sender, and body
-- For bill emails (TNB, Unifi, Celcom, etc.): a smart card appears showing the parsed amount, due date, and account reference
-- The email is automatically marked as read when you open it
-
-**Bills panel (far right)**
-- Shows unpaid and overdue bills sorted by due date
-- Shows a "Bills due soon" countdown for each bill (e.g. "Due in 5 days")
-- Click any bill to mark it as paid — it disappears from the panel
-- Shows monthly totals: total unpaid amount + overdue count
-- If you have Shopee or Lazada receipts, they appear in a "Recent orders" section
-
----
-
-## Running the Tests
-
-The test suite covers all backend logic — encryption, bill parsers, API routes, and auth. The tests do **not** require a real Gmail or Outlook account.
-
-```powershell
-cd C:\Users\bryan.GOAT\Downloads\VibeCode\inboxmy-backend
-
-# Set the test encryption key (required — can be any 64 hex chars)
+```bash
+cd inboxmy-backend
 $env:ENCRYPTION_KEY="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 $env:DATA_DIR="./data-test"
-
-# Run all tests
 npm test
 ```
 
-Expected output:
-```
- RUN  v4.x.x
+### Utils tests (4 tests)
 
- Test Files  12 passed (12)
-       Tests  71 passed (71)
-    Duration  ~3s
+```bash
+# From repo root
+npm run test:utils
 ```
+
+### Combined: 114 tests total
+
+Test coverage includes: encryption, bill parsers, API routes, auth middleware, sync engine, AI notifier, notification scheduler utils.
 
 ---
 
-### Plan 1 — Backend Core tests
+## Plans Reference
 
-| Test file | What it tests |
-|---|---|
-| `tests/crypto.test.ts` | AES-256-GCM encryption and decryption round-trip, tamper detection |
-| `tests/parsers/tnb.test.ts` | TNB eBill detection, amount extraction (RM format), due date parsing |
-| `tests/parsers/lhdn.test.ts` | LHDN domain and subject matching |
-| `tests/parsers/shopee.test.ts` | Shopee order reference and amount extraction |
-| `tests/parsers/generic-bill.test.ts` | Generic Malaysian RM amount and date parsing |
-| `tests/parsers/remaining.test.ts` | Unifi, Celcom/Maxis, Touch 'n Go, Lazada parser coverage |
-| `tests/routes/accounts.test.ts` | GET /api/accounts, PATCH label, DELETE account |
+All implementation plans live in `docs/superpowers/plans/`.
 
----
-
-### Plan 2 — Frontend Wiring tests
-
-Plan 2 is all frontend (vanilla JS). There are no automated tests — use the manual checklist below:
-
-1. Start the server (`npm start`) and open `http://localhost:3001`
-2. Dashboard loads without console errors
-3. Email list panel shows placeholder state when no accounts are connected
-4. Accounts sidebar renders "No accounts connected" when empty
-5. Bills panel renders "No bills found" when empty
-6. Click **↻ Sync** — button shows "↻ Syncing…" and then "Sync complete!" toast appears
-7. Connect a Gmail or Outlook account — account appears in the sidebar
-8. After sync completes, emails appear in the list with sender, subject, and date
-9. Click an email row — detail pane renders subject, sender, body
-10. Infinite scroll: scroll to bottom of email list — next 50 emails load
-11. Category tabs (`All`, `Unread`, `Bills`, `Govt`, `Receipts`) filter the list
-12. Search bar filters by sender name as you type
-
----
-
-### Plan 3 — OAuth Credentials Setup tests
-
-| Test file | What it tests |
-|---|---|
-| `tests/config.test.ts` | validateConfig() checklist output — Gmail/Outlook [✓]/[ ] states |
-| `tests/setup.test.ts` | isValidGoogleClientId, isValidAzureClientId, isValidSecret, buildEnvContent |
-
-To run just Plan 3 tests:
-```powershell
-$env:ENCRYPTION_KEY="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-$env:DATA_DIR="./data-test"
-npx vitest run tests/config.test.ts tests/setup.test.ts
-```
-
----
-
-### Plan 4 — Multi-User Architecture tests
-
-| Test file | What it tests |
-|---|---|
-| `tests/routes/auth.test.ts` | POST /auth/signup, POST /auth/login, GET /auth/me, POST /auth/logout |
-| `tests/routes/auth-reset.test.ts` | POST /auth/forgot-password (email enumeration safe), POST /auth/reset-password — expired/used token rejection |
-| `tests/middleware/auth.test.ts` | requireAuth — valid session passes, no cookie returns 401, fake session returns 401, session older than 30 days returns 401 |
-
-To run just Plan 4 tests:
-```powershell
-$env:ENCRYPTION_KEY="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-$env:DATA_DIR="./data-test"
-npx vitest run tests/routes/auth.test.ts tests/routes/auth-reset.test.ts tests/middleware/auth.test.ts
-```
-
-Manual test checklist for Plan 4 (requires running server):
-
-1. `http://localhost:3001` → redirects to `/auth`
-2. Sign up → redirected to dashboard, HttpOnly `session` cookie set
-3. Refresh → still logged in
-4. Sign Out → redirected to `/auth`, back button blocked
-5. Sign in again → dashboard loads
-6. Sign in with wrong password → "Invalid email or password"
-7. Open incognito, sign up as a different user, connect a Gmail account → original user's accounts panel does not show the new account
-8. Forgot password → check server console for reset link → click link → new password works, old password rejected
-9. After password reset, existing sessions are invalidated
-
----
-
-### Plan 5 — Account Management UI tests
-
-| Test file | What it tests |
-|---|---|
-| `tests/routes/accounts.test.ts` | GET returns `token_expired` field; empty-string label accepted; DELETE cascades to emails |
-| `tests/email/sync-engine.test.ts` | `token_expired=1` on Gmail `invalid_grant`; Outlook re-auth error; no flag on non-auth errors; clears on success |
-
-To run just Plan 5 tests:
-```powershell
-$env:ENCRYPTION_KEY="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-$env:DATA_DIR="./data-test"
-npx vitest run tests/routes/accounts.test.ts tests/email/sync-engine.test.ts
-```
-
-Manual test checklist for Plan 5 (requires running server):
-
-1. Open Settings → account cards show ✏ rename button and × delete button
-2. Click ✏ → label becomes editable input → Enter saves → sidebar updates instantly
-3. Escape during rename → reverts with no API call
-4. Click × → simple confirm modal (no type-DELETE), Delete immediately enabled
-5. Confirm delete → account gone from sidebar and settings, toast shown
-6. After delete, open wipe-all confirm → type-DELETE input is back (modal restored correctly)
-7. Set `token_expired=1` in DB → reload → red "⚠ Auth expired — Reconnect" badge on card
-8. Reconnect link points to correct `/api/accounts/connect/gmail` (or `outlook`)
-
----
-
-To run a single test file:
-```powershell
-$env:ENCRYPTION_KEY="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-$env:DATA_DIR="./data-test"
-npx vitest run tests/crypto.test.ts
-```
-
-To run tests in watch mode (re-runs on file save — useful during development):
-```powershell
-$env:ENCRYPTION_KEY="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-$env:DATA_DIR="./data-test"
-npm run test:watch
-```
+| # | Plan | Status |
+|---|------|--------|
+| 1 | Backend Core | ✅ Done |
+| 2 | Frontend Wiring | ✅ Done |
+| 3 | OAuth Credentials Setup | ✅ Done |
+| 4 | Multi-User Architecture | ✅ Done |
+| 5 | Account Management UI | ✅ Done |
+| 6 | Notifications + Overdue Detection (Electron) | ✅ Done |
 
 ---
 
 ## Credentials Setup
 
-For the full step-by-step guide to setting up Google Cloud (Gmail) and Azure Portal (Outlook) credentials, see [SETUP.md](./SETUP.md).
-
----
-
-## API Reference
-
-All endpoints are available at `http://localhost:3001` while the server is running.
-
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/health` | Server health check — returns `{"ok":true}` |
-| GET | `/api/accounts` | List all connected accounts |
-| GET | `/api/accounts/connect/gmail` | Start Gmail OAuth flow (opens browser redirect) |
-| GET | `/api/accounts/connect/outlook` | Start Outlook OAuth flow (opens browser redirect) |
-| DELETE | `/api/accounts/:id` | Remove a connected account and its emails |
-| PATCH | `/api/accounts/:id/label` | Rename an account — body: `{"label":"My Work Gmail"}` |
-| GET | `/api/emails` | List emails — params: `?category=bill\|govt\|receipt\|work`, `?accountId=`, `?search=`, `?limit=50`, `?offset=0` |
-| GET | `/api/emails/:id` | Get a single email with decrypted body + parsed bill fields |
-| PATCH | `/api/emails/:id/read` | Mark an email as read |
-| GET | `/api/bills` | List parsed bills — params: `?status=unpaid\|paid\|overdue` |
-| PATCH | `/api/bills/:id/status` | Update bill status — body: `{"status":"paid"}` |
-| POST | `/api/sync/trigger` | Trigger a sync — body: `{}` for all accounts, `{"accountId":"..."}` for one |
-
-**Quick API test (PowerShell):**
-```powershell
-# Check server is alive
-curl http://localhost:3001/health
-
-# List connected accounts
-curl http://localhost:3001/api/accounts
-
-# List latest 10 emails
-curl "http://localhost:3001/api/emails?limit=10"
-
-# List unpaid bills
-curl "http://localhost:3001/api/bills?status=unpaid"
-```
+For the full step-by-step guide to setting up Google Cloud (Gmail) and Azure Portal (Outlook) OAuth credentials, see [SETUP.md](./SETUP.md).
 
 ---
 
@@ -417,255 +123,8 @@ curl "http://localhost:3001/api/bills?status=unpaid"
 
 | What | Where | Access |
 |---|---|---|
-| Email bodies + subjects | `data/inboxmy.db` — AES-256-GCM encrypted | Only the machine holding `ENCRYPTION_KEY` |
+| Email bodies + subjects | `data/inboxmy.db` — AES-256-GCM encrypted | Only the device holding `ENCRYPTION_KEY` |
 | OAuth tokens | Same DB, encrypted separately | Same |
-| Sender addresses | Stored unencrypted (needed for parser matching) | Local machine only |
-| Bill amounts | `parsed_bills` table, stored as numbers | Local machine only |
-| Network | API bound to `127.0.0.1` — not reachable from LAN or internet | Local machine only |
-
----
-
-## Daily Usage (After First Setup)
-
-Once everything is set up, your daily workflow is just:
-
-```powershell
-cd C:\Users\bryan.GOAT\Downloads\VibeCode\inboxmy-backend
-npm start
-```
-
-Then open `http://localhost:3001` in your browser.
-
-The scheduler syncs your emails automatically every 15 minutes. You can also click **↻ Sync** in the dashboard at any time.
-
-If you update the backend source code (`.ts` files in `inboxmy-backend/src/`), rebuild before starting:
-```powershell
-npm run build
-npm start
-```
-
----
-
-## Vision
-
-InboxMY is heading toward a **BlueMail-style model**: you (the person running the server) register the OAuth app with Google and Microsoft once. Your users connect their own email accounts by clicking "Connect Gmail" or "Connect Outlook" — they go through Google/Microsoft's standard permission screen and are done. No terminal, no credentials, no setup knowledge required.
-
-The current version is a single-user local app. **Plan 4** adds multi-user architecture: user sign-up/sign-in, per-user data isolation, and per-user encryption keys — the foundation for both a hosted service and a local-download app.
-
----
-
-## Testing Bill Detection
-
-Use these templates to populate InboxMY with realistic test data — no real utility accounts needed. Send from a **second Gmail account** to the account connected in InboxMY, then click **↻ Sync**.
-
-### How the parsers match
-
-| Parser | Triggers on |
-|---|---|
-| TNB | Sender `@tnb.com.my` **or** subject contains `TNB` + bill word |
-| Unifi | Sender `@unifi.com.my` **or** subject contains `Unifi` + bill word |
-| Maxis / Celcom / Digi | Sender `@maxis/celcom/digi.com.my` **or** subject contains brand + bill word |
-| Touch 'n Go | Sender `@tngdigital.com.my` **or** subject contains `TNG` / `Touch n Go` |
-| Shopee | Sender `@shopee.com.my` **or** subject contains `Shopee` + order word |
-| Lazada | Sender `@lazada.com.my` **or** subject contains `Lazada` + order word |
-| LHDN | Sender `@hasil.gov.my` **or** subject contains `LHDN` / `e-Filing` / `cukai` |
-| Generic bill | Any sender — body must contain an RM amount **plus** explicit payment language (`due date`, `please pay`, `invoice`, `amount due`, etc.) |
-
-Because subject-based matching is supported, you can send all tests from any Gmail address.
-
----
-
-### Test 1 — Generic Bill *(any sender, always works)*
-
-**Subject:** `Invoice #INV-2026-001 — Amount Due`
-
-```
-Dear Customer,
-
-Invoice No:  INV-2026-001
-Account No:  9876543210
-Amount Due:  RM 234.50
-Due Date:    28 Feb 2026
-
-Please pay before the due date to avoid service interruption.
-```
-
-✅ Bills category · Smart card: RM 234.50 · Due 28 Feb 2026 · Biller: Unknown
-
----
-
-### Test 2 — TNB Electricity Bill
-
-**Subject:** `TNB eBil - Invoice Elektrik Bil`
-
-```
-Akaun No: 1122334455
-Jumlah Bil (Amount Due): RM 178.20
-Tarikh Akhir Bayaran (Due Date): 15 Mar 2026
-
-Sila bayar sebelum tarikh akhir / Please pay before due date.
-```
-
-✅ Bills category · Smart card: RM 178.20 · Due 15 Mar 2026 · Biller: TNB
-
----
-
-### Test 3 — Unifi Monthly Bill
-
-**Subject:** `Unifi Monthly Bill Invoice — March 2026`
-
-```
-Account No: 901234567
-Amount Due: RM 129.00
-Due Date: 20 Mar 2026
-
-Please pay your Unifi bill before the due date.
-```
-
-✅ Bills category · Biller: Unifi
-
----
-
-### Test 4 — Maxis Postpaid Bill
-
-**Subject:** `Maxis Bill Invoice Statement — March 2026`
-
-```
-Account: 0123456789
-Bill Amount: RM 88.00
-Payment Due Date: 18 Mar 2026
-
-Please pay before the due date to continue your service.
-```
-
-✅ Bills category · Biller: Maxis
-
----
-
-### Test 5 — Touch 'n Go eWallet
-
-**Subject:** `Touch n Go TNG Monthly Statement`
-
-```
-Your Touch n Go eWallet account summary.
-Total transaction amount: RM 56.80
-```
-
-✅ Bills category · Biller: TnG
-
----
-
-### Test 6 — Shopee Order Confirmation
-
-**Subject:** `Shopee Order Confirmed — Pesanan Anda Telah Disahkan`
-
-```
-Order No: 240115ABC123XYZ789
-Total amount paid: RM 45.90
-Thank you for shopping with Shopee!
-```
-
-✅ Receipts category · Biller: Shopee · Appears in Recent orders panel
-
----
-
-### Test 7 — Lazada Order
-
-**Subject:** `Lazada Order Placed Successfully`
-
-```
-Order ID: 987654321
-Your order has been placed.
-Total: RM 132.00
-Thank you for shopping with Lazada!
-```
-
-✅ Receipts category · Biller: Lazada · Appears in Recent orders panel
-
----
-
-### Test 8 — LHDN Government Notice
-
-**Subject:** `LHDN e-Filing Pemberitahuan Cukai Pendapatan 2025`
-
-```
-Pemberitahuan daripada Lembaga Hasil Dalam Negeri Malaysia.
-Sila semak status e-Filing anda.
-```
-
-✅ Government category · No bill amount (LHDN parser is detection-only by design)
-
----
-
-### Test 9 — False positive check *(should NOT become a bill)*
-
-**Subject:** `Flash Sale! Up to 50% off — Shop Now`
-
-```
-Don't miss our biggest sale! RM 29.90 only!
-Limited time offer. Shop now and save big!
-```
-
-✅ Should land in **Promotions** folder · Must NOT appear in Bills due soon panel
-
----
-
-### After syncing — what to verify
-
-| Check | Where |
-|---|---|
-| Email appears in Bills / Receipts / Govt tab | Sidebar |
-| Smart card shows correct amount + due date | Email detail pane |
-| Bill appears in "Bills due soon" panel | Right panel |
-| Promotions email is absent from Bills panel | Right panel |
-| Re-sync from scratch resets everything | Profile → Settings → Re-sync |
-
----
-
-## Roadmap
-
-| # | Plan | Key Deliverables | Status |
-|---|------|-----------------|--------|
-| 1 | **Backend Core** | Encrypted SQLite, OAuth flows (Gmail + Outlook), email sync engine, Malaysian bill parsers (TNB, Unifi, Maxis, TnG, LHDN, Shopee, Lazada), REST API | ✅ Done |
-| 2 | **Frontend Wiring** | Dashboard panels wired to live API — email list, email detail, accounts sidebar, bills panel, sync button, infinite scroll, error handling | ✅ Done |
-| 3 | **OAuth Credentials Setup** | `npm run setup` wizard, startup config validator with checklist, `SETUP.md` full reference guide, README roadmap remodel | ✅ Done |
-| 4 | **Multi-User Architecture** | User sign-up/sign-in (email+password), per-user AES-256-GCM encrypted data keys, HTTP-only cookie sessions (30-day TTL), email-based password reset, auth middleware on all API routes, OAuth state relay, frontend sign-in page | ✅ Done |
-| 5 | **Account Management UI** | Rename accounts, delete + revoke, re-auth expired tokens, per-account sync status | ✅ Done |
-| 6 | **Notifications + Overdue Detection** | Due-date alerts, overdue bill banner, browser notifications | ⏳ Pending |
-| 7 | **Search + Filtering Improvements** | Full-text search, date range filters, multi-account filter, saved searches | ⏳ Pending |
-| 8 | **Packaging + Auto-start on Login** | Electron or system tray wrapper, auto-start on OS login, local-download installer | ⏳ Pending |
-| 9 | **Hardening + v1.0 Polish** | Rate limiting review, error boundary UI, accessibility pass, performance profiling, v1.0 release | ⏳ Pending |
-| 10 | **Hosted Deployment** | Docker setup, cloud hosting config, privacy-preserving multi-tenant model | ⏳ Pending |
-
----
-
-## Next Session Prompt
-
-Copy and paste this at the start of your next session:
-
-```
-We are building InboxMY — a privacy-first, locally-priced unified email dashboard for Malaysia.
-It aggregates Gmail and Outlook accounts (up to 6), parses Malaysian bills (TNB, Unifi, Celcom/Maxis/Digi,
-Touch 'n Go, LHDN, MySejahtera, Shopee, Lazada), and stores everything AES-256-GCM encrypted in a local
-SQLite database. Nothing is sent to any cloud.
-
-Completed so far:
-- Plan 1 (Backend): 100% complete — encrypted SQLite, OAuth flows (Gmail + Outlook), sync engine,
-  Malaysian bill parsers (TNB, Unifi, Maxis, TnG, LHDN, Shopee, Lazada), REST API. 7 test files.
-- Plan 2 (Frontend Wiring): 100% complete — frontend/app.js wires all dashboard panels to the live API
-  (email list, detail, accounts sidebar, bills panel, sync button, infinite scroll, error handling).
-- Plan 3 (OAuth Credentials Setup): 100% complete — npm run setup wizard, startup config validator with
-  checklist, SETUP.md full reference guide, README roadmap remodel. 2 test files.
-- Plan 4 (Multi-User Architecture): 100% complete — user sign-up/sign-in (email + password), per-user
-  AES-256-GCM encrypted data keys, HTTP-only cookie sessions (30-day absolute TTL), forgot-password +
-  reset-password with key re-wrap, requireAuth middleware on all API routes, OAuth state relay,
-  frontend auth.html login/signup page, sign-out button. 3 test files. 71 tests total passing.
-- Plan 5 (Account Management UI): 100% complete — rename accounts (pencil icon → inline input, Enter/Escape),
-  delete + revoke (simple confirm modal, cascades emails), re-auth badge (token_expired column, sync engine
-  sets/clears it, red reconnect badge in settings), per-account sync status badge (green synced / grey never).
-  2 new test files. 88 tests total passing.
-
-Today's goal is Plan 6: Notifications + Overdue Detection.
-Add due-date alerts, overdue bill banner, and browser notifications.
-See docs/superpowers/specs/ for the design spec once it is written.
-```
+| Gemini API key | Windows DPAPI (`safeStorage`) — never logged or transmitted | Local device only |
+| Network | API bound to `127.0.0.1` — not reachable from LAN or internet | Local device only |
+| Telemetry | None | N/A |

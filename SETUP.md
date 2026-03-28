@@ -169,3 +169,36 @@ Azure secrets expire. Generate a new secret in Certificates & secrets, copy the 
 5. Click **Connect Gmail** or **Connect Outlook** in the accounts sidebar.
 6. You are redirected to Google/Microsoft's permission screen — approve access.
 7. The account appears in the dashboard. Click **↻ Sync** to fetch your emails.
+
+---
+
+## AI Notifications (Optional)
+
+InboxMY can generate smart notification copy using Gemini 2.0 Flash. This is optional — the app works without it using plain copy.
+
+### Getting a Gemini API Key
+
+1. Go to [Google AI Studio](https://aistudio.google.com/apikey) and create an API key
+2. Free tier: ~15 requests/minute — more than enough for InboxMY's 60-minute scheduler
+3. Cost: effectively free at personal usage scale
+
+### Configuring the Key
+
+1. Launch InboxMY (Electron app)
+2. Click the settings gear icon
+3. Under **AI Notifications**, paste your Gemini API key and click **Save**
+4. The key is encrypted with Windows DPAPI (`safeStorage`) and stored only on your device
+
+### What AI Notifications Do
+
+- **Smart filtering**: Suppresses low-value alerts (Shopee promotions, small amounts)
+- **Rich copy**: Generates contextual messages ("TNB eBill due Friday — RM142.80")
+- **Fallback**: If Gemini fails (network, quota), plain copy is used automatically
+
+### Privacy Note
+
+Your Gemini API key is:
+- Never sent to InboxMY servers (there are none)
+- Never logged
+- Encrypted with Windows DPAPI on your device
+- Passed directly from your device to Google's API
