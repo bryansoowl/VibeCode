@@ -855,20 +855,23 @@ async function saveGeminiKeySetting() {
   if (!window.inboxmy) return
   const input = document.getElementById('gemini-key-input')
   const statusEl = document.getElementById('gemini-key-status')
-  if (!input || !input.value.trim()) return
+  if (!input || !input.value.trim()) { showToast('Please enter a Gemini API key'); return }
 
   const result = await window.inboxmy.saveGeminiKey(input.value.trim())
   if (result && result.ok) {
     input.value = ''
     if (statusEl) { statusEl.textContent = '✓ Key saved'; statusEl.className = 'key-status saved' }
+    showToast('Gemini key saved!')
   } else {
     if (statusEl) { statusEl.textContent = '✗ Failed to save'; statusEl.className = 'key-status error' }
+    showToast('Failed to save key')
   }
 }
 
 async function toggleAutoLaunch(enabled) {
   if (!window.inboxmy) return
   await window.inboxmy.setAutoLaunch(enabled)
+  showToast(enabled ? 'InboxMY will launch at Windows startup' : 'Auto-launch disabled')
 }
 
 function openSettings() {

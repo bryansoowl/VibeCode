@@ -167,7 +167,7 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 #right-panel::-webkit-scrollbar{width:0}
 .rp-section{padding:14px;border-bottom:1px solid var(--border)}
 .rp-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--ink4);margin-bottom:10px}
-.bill-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;background:#fff;border:1px solid var(--border);margin-bottom:6px;transition:background .1s;cursor:pointer}
+.bill-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;background:#fff;border:1px solid var(--border);margin-bottom:6px;transition:background .1s,box-shadow 0.3s;cursor:pointer}
 .bill-item:hover{background:var(--cream2)}
 .bi-icon{font-size:16px}
 .bi-info{flex:1;min-width:0}
@@ -331,10 +331,7 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 .key-status.error { color: var(--coral, #e8402a); }
 
 /* ── Bill highlight ──────────────────────────────────────────────────── */
-.bill-item.highlight {
-  box-shadow: 0 0 0 2px var(--coral, #e8402a);
-  transition: box-shadow 0.3s;
-}
+.bill-item.highlight { box-shadow: 0 0 0 2px var(--coral, #e8402a); }
 </style>
 </head>
 <body>
