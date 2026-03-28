@@ -168,3 +168,48 @@ describe('syncAccount — newEmails return', () => {
     expect(result.newEmails[0].subject).toHaveLength(200)
   })
 })
+
+describe('syncAllAccounts — returns accumulated results', () => {
+  beforeEach(() => { vi.resetAllMocks() })
+
+  it('returns combined added count and newEmails across all accounts for a user', async () => {
+    const { getDb } = await import('../../src/db')
+    const { encryptSystem } = await import('../../src/crypto')
+    const userId = randomUUID()
+    const db = getDb()
+
+    // users table: id, email, password_hash, pbkdf2_salt, data_key_enc, recovery_enc, created_at
+    db.prepare(`INSERT OR IGNORE INTO users (id, email, password_hash, pbkdf2_salt, data_key_enc, recovery_enc, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`
+    ).run(userId, `${userId}@test.com`, 'hash', 'salt', encryptSystem('key'), encryptSystem('rec'), Date.now())
+
+    const acc1 = randomUUID()
+    const acc2 = randomUUID()
+    db.prepare(`INSERT INTO accounts (id, provider, email, token_enc, created_at, user_id)
+      VALUES (?, 'gmail', ?, ?, ?, ?)`
+    ).run(acc1, `${acc1}@test.com`, encryptSystem('{}'), Date.now(), userId)
+    db.prepare(`INSERT INTO accounts (id, provider, email, token_enc, created_at, user_id)
+      VALUES (?, 'gmail', ?, ?, ?, ?)`
+    ).run(acc2, `${acc2}@test.com`, encryptSystem('{}'), Date.now(), userId)
+
+    const makeEmail = (accountId: string): import('../../src/email/types').NormalizedEmail => ({
+      id: randomUUID(), accountId, threadId: null, subject: `Email for ${accountId}`,
+      sender: 'a@b.com', senderName: 'Sender', receivedAt: Date.now(), isRead: false,
+      folder: 'inbox', tab: 'primary', isImportant: false, category: null,
+      bodyHtml: null, bodyText: null, snippet: null, rawSize: 50,
+    })
+
+    vi.mocked(mockGmailFetch)
+      .mockResolvedValueOnce({ emails: [makeEmail(acc1)], newHistoryId: null })
+      .mockResolvedValueOnce({ emails: [makeEmail(acc2)], newHistoryId: null })
+
+    const { syncAllAccounts } = await import('../../src/email/sync-engine')
+    const result = await syncAllAccounts(userId, TEST_KEY)
+
+    expect(result.added).toBe(2)
+    expect(result.newEmails).toHaveLength(2)
+    const accountIds = result.newEmails.map(e => e.accountId)
+    expect(accountIds).toContain(acc1)
+    expect(accountIds).toContain(acc2)
+  })
+})

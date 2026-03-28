@@ -134,10 +134,18 @@ export async function syncAccount(
   return { added, errors, newEmails }
 }
 
-export async function syncAllAccounts(userId: string, dataKey: Buffer): Promise<void> {
+export async function syncAllAccounts(
+  userId: string,
+  dataKey: Buffer
+): Promise<{ added: number; newEmails: NewEmailSummary[] }> {
   const db = getDb()
   const accounts = db.prepare('SELECT id FROM accounts WHERE user_id = ?').all(userId) as any[]
+  let totalAdded = 0
+  const allNewEmails: NewEmailSummary[] = []
   for (const acc of accounts) {
-    await syncAccount(acc.id, dataKey)
+    const result = await syncAccount(acc.id, dataKey)
+    totalAdded += result.added
+    allNewEmails.push(...result.newEmails)
   }
+  return { added: totalAdded, newEmails: allNewEmails }
 }
