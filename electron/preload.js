@@ -16,6 +16,10 @@ contextBridge.exposeInMainWorld('inboxmy', {
   onNavigateToBill: (cb) =>
     ipcRenderer.on('navigate-to-bill', (_, billId) => cb(billId)),
 
+  // Background sync completed — renderer should refresh email list
+  onSyncComplete: (cb) =>
+    ipcRenderer.on('sync-complete', () => cb()),
+
   // Gemini API key — stored encrypted via safeStorage (Windows DPAPI)
   saveGeminiKey: (key) =>
     ipcRenderer.invoke('save-gemini-key', key),
@@ -28,4 +32,11 @@ contextBridge.exposeInMainWorld('inboxmy', {
     ipcRenderer.invoke('set-auto-launch', enabled),
   getAutoLaunch: () =>
     ipcRenderer.invoke('get-auto-launch'),
+
+  // Email arrival — carries authoritative unreadCount from main process
+  onNewEmails: (cb) => ipcRenderer.on('new-emails', (_, data) => cb(data)),
+
+  // Notification preference toggle
+  getNotifPref: () => ipcRenderer.invoke('get-notif-pref'),
+  setNotifPref: (enabled) => ipcRenderer.invoke('set-notif-pref', enabled),
 })
