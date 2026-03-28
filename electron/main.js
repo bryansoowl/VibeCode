@@ -8,15 +8,20 @@ const { makeNotificationKey } = require('./utils')
 
 const BACKEND_PORT = 3000
 const BACKEND_URL = `http://localhost:${BACKEND_PORT}`
-const SCHEDULER_INTERVAL_MS = 60 * 60 * 1000  // 60 minutes
+const SYNC_INTERVAL_MS = 60 * 1000              // 60 seconds — email sync (History API makes this cheap)
+const NOTIFICATION_INTERVAL_MS = 60 * 60 * 1000 // 60 minutes — bill notification check
 const SCHEDULER_STARTUP_DELAY_MS = 30 * 1000   // 30 seconds after launch
 const NOTIFIED_FILE = path.join(app.getPath('userData'), 'notified.json')
+const EMAIL_NOTIFIED_FILE = path.join(app.getPath('userData'), 'notified-emails.json')
+const PREFS_FILE = path.join(app.getPath('userData'), 'prefs.json')
 const GEMINI_KEY_FILE = path.join(app.getPath('userData'), 'gemini.enc')
 
 let mainWindow = null
 let tray = null
 let backendProcess = null
-let schedulerTimer = null
+let syncTimer = null
+let notifTimer = null
+let emailNotifEnabled = true  // in-memory cache — populated in app.whenReady
 
 const autoLauncher = new AutoLaunch({ name: 'InboxMY' })
 
@@ -25,11 +30,33 @@ function loadNotified() {
   try { return JSON.parse(fs.readFileSync(NOTIFIED_FILE, 'utf8')) } catch { return {} }
 }
 function saveNotified(map) {
-  fs.writeFileSync(NOTIFIED_FILE, JSON.stringify(map))
+  try { fs.writeFileSync(NOTIFIED_FILE, JSON.stringify(map)) }
+  catch (e) { console.error('[notified] Failed to save:', e.message) }
+}
+function loadEmailNotified() {
+  try { return JSON.parse(fs.readFileSync(EMAIL_NOTIFIED_FILE, 'utf8')) } catch { return {} }
+}
+function saveEmailNotified(map) {
+  const keys = Object.keys(map)
+  if (keys.length > 500) {
+    const pruned = {}
+    for (const k of keys.slice(keys.length - 500)) pruned[k] = true
+    map = pruned
+  }
+  try { fs.writeFileSync(EMAIL_NOTIFIED_FILE, JSON.stringify(map)) }
+  catch (e) { console.error('[email-notified] Failed to save:', e.message) }
+}
+function loadPrefs() {
+  try { return { emailNotifications: true, ...JSON.parse(fs.readFileSync(PREFS_FILE, 'utf8')) } }
+  catch { return { emailNotifications: true } }
+}
+function savePrefs(prefs) {
+  try { fs.writeFileSync(PREFS_FILE, JSON.stringify(prefs)) }
+  catch (e) { console.error('[prefs] Failed to save:', e.message) }
 }
 
 // ── Windows taskbar badge ───────────────────────────────────────────────────
-function setWindowsBadge(win, count) {
+function setWindowsBadge(win, count, label = 'unread') {
   if (!win || win.isDestroyed()) return
   if (count === 0) {
     win.setOverlayIcon(null, '')
@@ -42,13 +69,16 @@ function setWindowsBadge(win, count) {
   const img = nativeImage.createFromDataURL(
     `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`
   )
-  win.setOverlayIcon(img, `${count} overdue`)
+  win.setOverlayIcon(img, `${count} ${label}`)
 }
 
 // ── Backend process ─────────────────────────────────────────────────────────
 function startBackend() {
   const serverPath = path.join(__dirname, '..', 'inboxmy-backend', 'dist', 'server.js')
-  const dataDir = path.join(app.getPath('userData'), 'data')
+  const backendDir = path.join(__dirname, '..', 'inboxmy-backend')
+  // Use the same data directory as standalone mode so existing connected accounts
+  // and their OAuth tokens are available when running via Electron.
+  const dataDir = path.join(backendDir, 'data')
   fs.mkdirSync(dataDir, { recursive: true })
 
   backendProcess = spawn(process.execPath, [serverPath], {
@@ -57,8 +87,9 @@ function startBackend() {
       NODE_ENV: 'production',
       PORT: String(BACKEND_PORT),
       DATA_DIR: dataDir,
-      ENCRYPTION_KEY: process.env.ENCRYPTION_KEY || '',
     },
+    // Set cwd to inboxmy-backend so dotenv can find .env for SESSION_SECRET etc.
+    cwd: backendDir,
     stdio: 'pipe',
   })
 
@@ -130,6 +161,35 @@ function createTray() {
 }
 
 // ── Scheduler ───────────────────────────────────────────────────────────────
+
+// Sync emails for all connected accounts (runs every 15 min)
+async function runSyncTick() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  const winSession = mainWindow.webContents.session
+  await new Promise((resolve) => {
+    const payload = '{}'
+    const req = net.request({
+      url: `${BACKEND_URL}/api/sync/trigger`,
+      method: 'POST',
+      session: winSession,
+    })
+    req.on('response', (res) => {
+      res.on('data', () => {})  // drain response
+      res.on('end', resolve)
+    })
+    req.on('error', () => resolve())
+    req.setHeader('Content-Type', 'application/json')
+    req.setHeader('Content-Length', Buffer.byteLength(payload))
+    req.write(payload)
+    req.end()
+  }).catch(() => {})
+  // Tell the renderer to refresh its email list after background sync
+  if (!mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('sync-complete')
+  }
+}
+
+// Check for due-soon bills and fire notifications (runs every 60 min)
 async function runSchedulerTick() {
   if (!mainWindow || mainWindow.isDestroyed()) return
 
@@ -169,7 +229,7 @@ async function runSchedulerTick() {
     })
   } catch { bills = [] }
 
-  if (!bills.length) { setWindowsBadge(mainWindow, 0); return }
+  if (!bills.length) { setWindowsBadge(mainWindow, 0, 'overdue'); return }
 
   // 3. Filter already-notified
   const notified = loadNotified()
@@ -182,7 +242,7 @@ async function runSchedulerTick() {
   // Always push current bills to renderer so the overdue banner stays current
   mainWindow.webContents.send('bill-alert', { overdue: bills.filter((b) => b.status === 'overdue') })
 
-  if (!fresh.length) { setWindowsBadge(mainWindow, bills.length); return }
+  if (!fresh.length) { setWindowsBadge(mainWindow, bills.length, 'overdue'); return }
 
   // 4. AI summary (optional — skip if no key)
   let results = fresh.map((b) => ({
@@ -250,7 +310,7 @@ async function runSchedulerTick() {
   saveNotified(notified)
 
   // 6. Windows taskbar badge
-  setWindowsBadge(mainWindow, bills.length)
+  setWindowsBadge(mainWindow, bills.length, 'overdue')
 }
 
 // ── Gemini key (safeStorage) ─────────────────────────────────────────────────
@@ -295,6 +355,16 @@ function setupIPC() {
   ipcMain.on('navigate-to-bill', (_, billId) => {
     mainWindow?.webContents.send('navigate-to-bill', billId)
   })
+
+  ipcMain.handle('get-notif-pref', () => emailNotifEnabled)
+
+  ipcMain.handle('set-notif-pref', (_, enabled) => {
+    emailNotifEnabled = Boolean(enabled)
+    const prefs = loadPrefs()
+    prefs.emailNotifications = emailNotifEnabled
+    savePrefs(prefs)
+    return { ok: true }
+  })
 }
 
 // ── App lifecycle ────────────────────────────────────────────────────────────
@@ -310,12 +380,19 @@ app.whenReady().then(async () => {
   createWindow()
   createTray()
   setupIPC()
+  emailNotifEnabled = loadPrefs().emailNotifications
 
-  // Start scheduler: first tick 30s after launch, then every 60min
-  schedulerTimer = setTimeout(() => {
-    runSchedulerTick()
-    schedulerTimer = setInterval(runSchedulerTick, SCHEDULER_INTERVAL_MS)
+  // Email sync: first run 30s after launch, then every 15 min
+  syncTimer = setTimeout(() => {
+    runSyncTick()
+    syncTimer = setInterval(runSyncTick, SYNC_INTERVAL_MS)
   }, SCHEDULER_STARTUP_DELAY_MS)
+
+  // Bill notifications: first check 60s after launch, then every 60 min
+  notifTimer = setTimeout(() => {
+    runSchedulerTick()
+    notifTimer = setInterval(runSchedulerTick, NOTIFICATION_INTERVAL_MS)
+  }, 60_000)
 })
 
 app.on('window-all-closed', () => {
@@ -323,7 +400,8 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
-  if (schedulerTimer) { clearTimeout(schedulerTimer); clearInterval(schedulerTimer) }
+  if (syncTimer)  { clearTimeout(syncTimer);  clearInterval(syncTimer) }
+  if (notifTimer) { clearTimeout(notifTimer); clearInterval(notifTimer) }
   if (backendProcess) backendProcess.kill()
 })
 
