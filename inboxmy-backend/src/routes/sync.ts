@@ -22,11 +22,11 @@ syncRouter.post('/trigger', async (req, res) => {
     if (accountId) {
       const result = await syncAccount(accountId, user.dataKey)
       console.log(`[sync] Done — added ${result.added} emails`)
-      res.json(result)
+      res.json({ added: result.added, emails: result.newEmails, errors: result.errors })
     } else {
-      await syncAllAccounts(user.id, user.dataKey)
-      console.log('[sync] Done — all accounts')
-      res.json({ ok: true })
+      const result = await syncAllAccounts(user.id, user.dataKey)
+      console.log(`[sync] Done — all accounts, added ${result.added} emails`)
+      res.json({ added: result.added, emails: result.newEmails })
     }
   } catch (err: any) {
     console.error('[sync] Failed:', err.message)
