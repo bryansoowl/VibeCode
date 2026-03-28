@@ -73,3 +73,34 @@ describe('POST /api/sync/trigger — all accounts', () => {
     expect(res.status).toBe(401)
   })
 })
+
+describe('POST /api/sync/trigger — single account', () => {
+  beforeEach(() => { vi.resetAllMocks() })
+
+  it('returns { added, emails, errors } for a specific account', async () => {
+    const { agent, id: userId } = await createTestUser()
+    const accountId = seedAccount(userId)
+    const email = makeEmail(accountId)
+
+    vi.mocked(mockGmailFetch).mockResolvedValue({ emails: [email], newHistoryId: null })
+
+    const res = await agent.post('/api/sync/trigger').send({ accountId })
+
+    expect(res.status).toBe(200)
+    expect(res.body.added).toBe(1)
+    expect(Array.isArray(res.body.emails)).toBe(true)
+    expect(res.body.emails[0].subject).toBe('Test Subject')
+    expect(Array.isArray(res.body.errors)).toBe(true)
+    expect(res.body.errors).toHaveLength(0)
+  })
+
+  it('returns 404 when accountId does not belong to the authenticated user', async () => {
+    const { agent } = await createTestUser()
+    const { id: otherUserId } = await createTestUser()
+    const otherAccountId = seedAccount(otherUserId)
+
+    const res = await agent.post('/api/sync/trigger').send({ accountId: otherAccountId })
+
+    expect(res.status).toBe(404)
+  })
+})
