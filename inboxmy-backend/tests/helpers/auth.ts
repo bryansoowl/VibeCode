@@ -3,12 +3,15 @@
 import request from 'supertest'
 import { app } from '../../src/server'
 import { randomUUID } from 'crypto'
+import { getDb } from '../../src/db'
+import { deriveWrapKey, unwrapKey } from '../../src/crypto'
 
 export interface TestUser {
   id: string
   email: string
   password: string
   agent: ReturnType<typeof request.agent>
+  dataKey: Buffer
 }
 
 export async function createTestUser(
@@ -26,5 +29,14 @@ export async function createTestUser(
     throw new Error(`createTestUser failed: ${res.status} ${JSON.stringify(res.body)}`)
   }
 
-  return { id: res.body.user.id, email: userEmail, password, agent }
+  // Derive the user's dataKey so tests can seed encrypted data with the correct key
+  const db = getDb()
+  const user = db.prepare(
+    'SELECT pbkdf2_salt, data_key_enc FROM users WHERE email = ?'
+  ).get(userEmail.toLowerCase()) as any
+  const salt = Buffer.from(user.pbkdf2_salt, 'base64')
+  const wrapKeyBuf = deriveWrapKey(password, salt)
+  const dataKey = unwrapKey(user.data_key_enc, wrapKeyBuf)
+
+  return { id: res.body.user.id, email: userEmail, password, agent, dataKey }
 }
