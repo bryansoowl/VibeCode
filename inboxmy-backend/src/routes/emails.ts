@@ -7,76 +7,109 @@ import { z } from 'zod'
 export const emailsRouter = Router()
 
 const listQuery = z.object({
-  category:  z.enum(['bill', 'govt', 'receipt', 'work']).optional(),
-  folder:    z.enum(['inbox', 'sent', 'spam', 'draft', 'trash']).optional(),
-  tab:       z.enum(['primary', 'promotions', 'social', 'updates', 'forums']).optional(),
-  important: z.enum(['1', 'true']).optional(),
-  accountId: z.string().optional(),
-  limit:     z.coerce.number().min(1).max(100).default(50),
-  offset:    z.coerce.number().min(0).default(0),
-  search:    z.string().max(100).optional(),
-  unread:    z.enum(['1', 'true']).optional(),
+  category:   z.enum(['bill', 'govt', 'receipt', 'work']).optional(),
+  folder:     z.enum(['inbox', 'sent', 'spam', 'draft', 'trash']).optional(),
+  tab:        z.enum(['primary', 'promotions', 'social', 'updates', 'forums']).optional(),
+  important:  z.enum(['1', 'true']).optional(),
+  accountId:  z.string().optional(),
+  accountIds: z.string().optional(),
+  limit:      z.coerce.number().min(1).max(100).default(50),
+  offset:     z.coerce.number().min(0).default(0),
+  search:     z.string().max(100).optional(),
+  unread:     z.enum(['1', 'true']).optional(),
+  dateFrom:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  dateTo:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 })
+
+const EMAIL_SELECT = `SELECT e.id, e.account_id, e.thread_id, e.subject_enc,
+  e.sender, e.sender_name, e.received_at, e.is_read, e.category,
+  e.snippet, e.raw_size
+  FROM emails e
+  JOIN accounts a ON a.id = e.account_id`
 
 emailsRouter.get('/', (req: Request, res: Response) => {
   const parsed = listQuery.safeParse(req.query)
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
 
-  const { category, folder, tab, important, accountId, limit, offset, search, unread } = parsed.data
+  const { category, folder, tab, important, accountId, accountIds, limit, offset, search, unread, dateFrom, dateTo } = parsed.data
   const user = (req as any).user
   const db = getDb()
 
-  let query = `SELECT e.id, e.account_id, e.thread_id, e.subject_enc,
-    e.sender, e.sender_name, e.received_at, e.is_read, e.category,
-    e.snippet, e.raw_size
-    FROM emails e
-    JOIN accounts a ON a.id = e.account_id
-    WHERE a.user_id = ?`
+  // accountIds (multi) takes precedence over accountId (single)
+  const idList = accountIds
+    ? accountIds.split(',').filter(s => s.trim().length > 0).slice(0, 6)
+    : accountId ? [accountId] : []
+
+  // Convert YYYY-MM-DD to milliseconds (MYT = UTC+8)
+  let dateFromMs: number | null = null
+  let dateToMs: number | null = null
+  if (dateFrom) dateFromMs = new Date(`${dateFrom}T00:00:00+08:00`).getTime()
+  if (dateTo)   dateToMs   = new Date(`${dateTo}T23:59:59.999+08:00`).getTime()
+  // Swap silently if inverted (user intent is clear)
+  if (dateFromMs !== null && dateToMs !== null && dateToMs < dateFromMs) {
+    ;[dateFromMs, dateToMs] = [dateToMs, dateFromMs]
+  }
+
+  // Build shared WHERE clause
+  const conditions: string[] = ['a.user_id = ?']
   const params: any[] = [user.id]
 
-  if (folder)    { query += ' AND e.folder = ?';      params.push(folder) }
-  if (tab)       { query += ' AND e.tab = ?';         params.push(tab) }
-  if (important) { query += ' AND e.is_important = 1' }
-  if (category)  { query += ' AND e.category = ?';    params.push(category) }
-  if (accountId) { query += ' AND e.account_id = ?';  params.push(accountId) }
-  if (search)    { query += ' AND e.sender LIKE ?';   params.push(`%${search}%`) }
-  if (unread)    { query += ' AND e.is_read = 0' }
-
-  // "Inbox" view excludes Promotions (they live in their own tab, like Gmail).
-  // Only applies when folder=inbox with no explicit tab override.
-  if (folder === 'inbox' && !tab) {
-    query += " AND e.tab != 'promotions'"
+  if (folder)    { conditions.push('e.folder = ?');      params.push(folder) }
+  if (tab)       { conditions.push('e.tab = ?');         params.push(tab) }
+  if (important) { conditions.push('e.is_important = 1') }
+  if (category)  { conditions.push('e.category = ?');    params.push(category) }
+  if (idList.length > 0) {
+    conditions.push(`e.account_id IN (${idList.map(() => '?').join(',')})`)
+    params.push(...idList)
   }
+  if (unread)              { conditions.push('e.is_read = 0') }
+  if (dateFromMs !== null) { conditions.push('e.received_at >= ?'); params.push(dateFromMs) }
+  if (dateToMs !== null)   { conditions.push('e.received_at <= ?'); params.push(dateToMs) }
+  // Inbox always excludes Promotions tab unless an explicit tab filter is set
+  if (folder === 'inbox' && !tab) { conditions.push("e.tab != 'promotions'") }
 
-  // Count total matching rows (same filters, no limit/offset)
-  let countQuery = `SELECT COUNT(*) as total FROM emails e JOIN accounts a ON a.id = e.account_id WHERE a.user_id = ?`
-  const countParams: any[] = [user.id]
-  if (folder)    { countQuery += ' AND e.folder = ?';      countParams.push(folder) }
-  if (tab)       { countQuery += ' AND e.tab = ?';         countParams.push(tab) }
-  if (important) { countQuery += ' AND e.is_important = 1' }
-  if (category)  { countQuery += ' AND e.category = ?';    countParams.push(category) }
-  if (accountId) { countQuery += ' AND e.account_id = ?';  countParams.push(accountId) }
-  if (search)    { countQuery += ' AND e.sender LIKE ?';   countParams.push(`%${search}%`) }
-  if (unread)    { countQuery += ' AND e.is_read = 0' }
-  if (folder === 'inbox' && !tab) {
-    countQuery += " AND e.tab != 'promotions'"
-  }
+  const WHERE = conditions.join(' AND ')
 
-  query += ' ORDER BY e.received_at DESC LIMIT ? OFFSET ?'
-  params.push(limit, offset)
-
-  const rows = db.prepare(query).all(...params) as any[]
-  const { total } = db.prepare(countQuery).get(...countParams) as any
   try {
-    const emails = rows.map(r => ({
-      ...r,
-      subject: decrypt(r.subject_enc, user.dataKey),
-      snippet: r.snippet ? decrypt(r.snippet, user.dataKey) : null,
-      subject_enc: undefined,
-    }))
-    res.json({ emails, limit, offset, total })
+    if (!search) {
+      // Fast path: SQL pagination, no decryption overhead
+      const rows = db.prepare(`${EMAIL_SELECT} WHERE ${WHERE} ORDER BY e.received_at DESC LIMIT ? OFFSET ?`).all(...params, limit, offset) as any[]
+      const { total } = db.prepare(`SELECT COUNT(*) as total FROM emails e JOIN accounts a ON a.id = e.account_id WHERE ${WHERE}`).get(...params) as any
+      const emails = rows.map(r => ({
+        ...r,
+        subject: decrypt(r.subject_enc, user.dataKey),
+        snippet: r.snippet ? decrypt(r.snippet, user.dataKey) : null,
+        subject_enc: undefined,
+      }))
+      return res.json({ emails, limit, offset, total })
+    }
+
+    // In-memory search path: fetch up to 2000 candidates, decrypt, filter
+    const candidates = db.prepare(`${EMAIL_SELECT} WHERE ${WHERE} ORDER BY e.received_at DESC LIMIT 2000`).all(...params) as any[]
+
+    const q = search.toLowerCase()
+    const filtered: any[] = []
+    for (const r of candidates) {
+      try {
+        const subject = decrypt(r.subject_enc, user.dataKey)
+        const snippet = r.snippet ? decrypt(r.snippet, user.dataKey) : null
+        if (
+          r.sender.toLowerCase().includes(q) ||
+          subject.toLowerCase().includes(q) ||
+          (snippet ?? '').toLowerCase().includes(q)
+        ) {
+          filtered.push({ ...r, subject, snippet, subject_enc: undefined })
+        }
+      } catch {
+        // Skip rows that fail decryption rather than aborting the whole response
+      }
+    }
+
+    const total = filtered.length
+    const emails = filtered.slice(offset, offset + limit)
+    return res.json({ emails, limit, offset, total })
   } catch {
-    res.status(500).json({ error: 'Failed to decrypt email data' })
+    return res.status(500).json({ error: 'Failed to process emails' })
   }
 })
 

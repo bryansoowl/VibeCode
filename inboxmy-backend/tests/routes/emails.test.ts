@@ -122,11 +122,11 @@ describe('GET /api/emails — date filters', () => {
   }
 
   it('dateFrom returns only emails on or after that date', async () => {
-    const { agent, id: userId } = await createTestUser()
+    const { agent, id: userId, dataKey } = await createTestUser()
     const acctId = seedAccount(userId)
-    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-10') })  // before
-    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-20') })  // on boundary
-    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-25') })  // after
+    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-10'), dataKey })  // before
+    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-20'), dataKey })  // on boundary
+    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-25'), dataKey })  // after
 
     const res = await agent.get('/api/emails?dateFrom=2026-03-20')
     expect(res.status).toBe(200)
@@ -135,11 +135,11 @@ describe('GET /api/emails — date filters', () => {
   })
 
   it('dateTo returns only emails on or before that date', async () => {
-    const { agent, id: userId } = await createTestUser()
+    const { agent, id: userId, dataKey } = await createTestUser()
     const acctId = seedAccount(userId)
-    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-10') })  // before boundary
-    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-20', 'end') })  // on boundary
-    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-25') })  // after
+    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-10'), dataKey })  // before boundary
+    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-20', 'end'), dataKey })  // on boundary
+    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-25'), dataKey })  // after
 
     const res = await agent.get('/api/emails?dateTo=2026-03-20')
     expect(res.status).toBe(200)
@@ -148,12 +148,12 @@ describe('GET /api/emails — date filters', () => {
   })
 
   it('dateFrom + dateTo combined return emails within the range only', async () => {
-    const { agent, id: userId } = await createTestUser()
+    const { agent, id: userId, dataKey } = await createTestUser()
     const acctId = seedAccount(userId)
-    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-01') })   // outside
-    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-10') })   // inside
-    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-15') })   // inside
-    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-31') })   // outside
+    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-01'), dataKey })   // outside
+    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-10'), dataKey })   // inside
+    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-15'), dataKey })   // inside
+    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-31'), dataKey })   // outside
 
     const res = await agent.get('/api/emails?dateFrom=2026-03-05&dateTo=2026-03-20')
     expect(res.status).toBe(200)
@@ -162,10 +162,10 @@ describe('GET /api/emails — date filters', () => {
   })
 
   it('swaps dateFrom and dateTo silently when inverted', async () => {
-    const { agent, id: userId } = await createTestUser()
+    const { agent, id: userId, dataKey } = await createTestUser()
     const acctId = seedAccount(userId)
-    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-10') })  // in range
-    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-25') })  // outside
+    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-10'), dataKey })  // in range
+    seedEmail(userId, { accountId: acctId, receivedAt: myt('2026-03-25'), dataKey })  // outside
 
     // dateFrom > dateTo — backend should swap them
     const res = await agent.get('/api/emails?dateFrom=2026-03-20&dateTo=2026-03-05')
@@ -182,11 +182,11 @@ describe('GET /api/emails — date filters', () => {
 
 describe('GET /api/emails — accountIds filter', () => {
   it('accountIds with single ID returns only emails from that account', async () => {
-    const { agent, id: userId } = await createTestUser()
+    const { agent, id: userId, dataKey } = await createTestUser()
     const acct1 = seedAccount(userId)
     const acct2 = seedAccount(userId)
-    seedEmail(userId, { accountId: acct1 })
-    seedEmail(userId, { accountId: acct2 })
+    seedEmail(userId, { accountId: acct1, dataKey })
+    seedEmail(userId, { accountId: acct2, dataKey })
 
     const res = await agent.get(`/api/emails?accountIds=${acct1}`)
     expect(res.status).toBe(200)
@@ -195,13 +195,13 @@ describe('GET /api/emails — accountIds filter', () => {
   })
 
   it('accountIds with multiple IDs returns emails from any (OR logic)', async () => {
-    const { agent, id: userId } = await createTestUser()
+    const { agent, id: userId, dataKey } = await createTestUser()
     const acct1 = seedAccount(userId)
     const acct2 = seedAccount(userId)
     const acct3 = seedAccount(userId)
-    seedEmail(userId, { accountId: acct1 })
-    seedEmail(userId, { accountId: acct2 })
-    seedEmail(userId, { accountId: acct3 })
+    seedEmail(userId, { accountId: acct1, dataKey })
+    seedEmail(userId, { accountId: acct2, dataKey })
+    seedEmail(userId, { accountId: acct3, dataKey })
 
     const res = await agent.get(`/api/emails?accountIds=${acct1},${acct2}`)
     expect(res.status).toBe(200)
@@ -224,9 +224,9 @@ describe('GET /api/emails — accountIds filter', () => {
   })
 
   it('accountIds with all-empty entries (e.g. ",,,") is treated as absent', async () => {
-    const { agent, id: userId } = await createTestUser()
-    seedEmail(userId, {})
-    seedEmail(userId, {})
+    const { agent, id: userId, dataKey } = await createTestUser()
+    seedEmail(userId, { dataKey })
+    seedEmail(userId, { dataKey })
 
     const res = await agent.get('/api/emails?accountIds=,,,')
     expect(res.status).toBe(200)
