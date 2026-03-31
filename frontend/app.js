@@ -56,6 +56,37 @@ function renderUnreadBadge() {
   el.style.display = ''
 }
 
+// ── EMAIL NOTIFICATIONS (Web Notifications API) ──────────────────────────────
+// In-memory set — deduplicates within the current session.
+const _notifiedEmailIds = new Set()
+
+async function showEmailNotifications(emails) {
+  if (!Array.isArray(emails) || emails.length === 0) return
+  // Request permission if not yet decided
+  if (Notification.permission === 'default') {
+    await Notification.requestPermission()
+  }
+  if (Notification.permission !== 'granted') return
+
+  const fresh = emails.filter(e => e && e.id && !_notifiedEmailIds.has(e.id))
+  if (fresh.length === 0) return
+  fresh.forEach(e => _notifiedEmailIds.add(e.id))
+
+  if (fresh.length <= 3) {
+    fresh.forEach(e => {
+      new Notification(e.senderName || e.sender || 'New email', {
+        body: (e.subject || '(no subject)').slice(0, 100),
+        silent: false,
+      })
+    })
+  } else {
+    new Notification('InboxMY', {
+      body: `${fresh.length} new emails arrived`,
+      silent: false,
+    })
+  }
+}
+
 // ── API CLIENT ───────────────────────────────────────────────────────────────
 async function apiFetch(path, options = {}) {
   let res;
@@ -845,7 +876,10 @@ async function doSync() {
   showProgress('Syncing emails…', 'Fetching new messages from your accounts');
 
   try {
-    await triggerSync();
+    const syncResult = await triggerSync();
+    if (syncResult.added > 0 && Array.isArray(syncResult.emails)) {
+      showEmailNotifications(syncResult.emails);
+    }
     // Reload all data panels
     await Promise.all([loadEmails(true), loadAccounts(), loadBills(), loadCategoryBadges()]);
     if (status) {
@@ -1158,9 +1192,10 @@ if (window.inboxmy) {
     refreshUnreadCount()
   })
 
-  window.inboxmy.onNewEmails(({ unreadCount: count }) => {
+  window.inboxmy.onNewEmails(({ unreadCount: count, emails }) => {
     unreadCount = count
     renderUnreadBadge()
+    if (emails) showEmailNotifications(emails)
   })
 
   // Deep link: toast click → navigate to specific bill
@@ -1187,7 +1222,11 @@ if (window.inboxmy) {
 // per poll when nothing is new).
 async function backgroundSyncPoll() {
   try {
-    await triggerSync();
+    const result = await triggerSync();
+    if (result.added > 0 && Array.isArray(result.emails)) {
+      showEmailNotifications(result.emails);
+      refreshUnreadCount();
+    }
     loadEmails(true);
     loadCategoryBadges();
   } catch { /* non-critical — ignore failures */ }
@@ -1203,6 +1242,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadCategoryBadges(),
     refreshUnreadCount(),
   ]);
+
+  // Request notification permission early so it's ready when emails arrive
+  if (Notification.permission === 'default') Notification.requestPermission()
 
   // Start background poll — 60 s interval for near-real-time inbox updates
   setInterval(backgroundSyncPoll, 60_000);

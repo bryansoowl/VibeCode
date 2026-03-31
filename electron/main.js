@@ -6,7 +6,7 @@ const { spawn } = require('child_process')
 const AutoLaunch = require('electron-auto-launch')
 const { makeNotificationKey } = require('./utils')
 
-const BACKEND_PORT = 3000
+const BACKEND_PORT = 3001
 const BACKEND_URL = `http://localhost:${BACKEND_PORT}`
 const SYNC_INTERVAL_MS = 60 * 1000              // 60 seconds — email sync (History API makes this cheap)
 const NOTIFICATION_INTERVAL_MS = 60 * 60 * 1000 // 60 minutes — bill notification check
@@ -162,7 +162,7 @@ function createTray() {
 
 // ── Scheduler ───────────────────────────────────────────────────────────────
 
-// Sync emails for all connected accounts (runs every 15 min)
+// Sync emails for all connected accounts (runs every 60s)
 async function runSyncTick() {
   if (!mainWindow || mainWindow.isDestroyed()) return
   const winSession = mainWindow.webContents.session
@@ -186,40 +186,11 @@ async function runSyncTick() {
   }).catch(() => '')
 
   let syncResult = {}
-  try { syncResult = JSON.parse(body) } catch { /* parse failed — skip notifications */ }
+  try { syncResult = JSON.parse(body) } catch { /* empty or non-JSON response */ }
 
   const { added = 0, emails = [] } = syncResult
 
-  // Fire email arrival toasts (only when notifications are enabled)
-  if (added > 0 && emailNotifEnabled) {
-    const emailNotified = loadEmailNotified()
-    const fresh = emails.filter((e) => !emailNotified[e.id])
-
-    if (fresh.length > 0) {
-      const icon = path.join(__dirname, 'assets', 'icon.png')
-      if (fresh.length <= 3) {
-        for (const e of fresh) {
-          new Notification({
-            title: e.senderName ?? e.sender,
-            body: e.subject.slice(0, 100),
-            icon,
-          }).show()
-        }
-      } else {
-        const accountCount = new Set(fresh.map((e) => e.accountId)).size
-        new Notification({
-          title: 'InboxMY',
-          body: `${fresh.length} new emails across ${accountCount} account(s)`,
-          icon,
-        }).show()
-      }
-
-      for (const e of fresh) emailNotified[e.id] = true
-      saveEmailNotified(emailNotified)
-    }
-  }
-
-  // Fetch authoritative unread count → update taskbar badge + send to renderer
+  // Fetch authoritative unread count → update taskbar badge + send emails to renderer
   if (added > 0 && mainWindow && !mainWindow.isDestroyed()) {
     await new Promise((resolve) => {
       const req2 = net.request({
@@ -235,7 +206,8 @@ async function runSyncTick() {
             const unreadCount = JSON.parse(buf2).count ?? 0
             setWindowsBadge(mainWindow, unreadCount)
             if (!mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('new-emails', { added, unreadCount })
+              // Send emails so renderer can fire Web Notifications
+              mainWindow.webContents.send('new-emails', { added, unreadCount, emails })
             }
           } catch {}
           resolve()
@@ -440,6 +412,7 @@ app.whenReady().then(async () => {
     return
   }
 
+  app.setAppUserModelId('my.inbox.app')
   createWindow()
   createTray()
   setupIPC()
