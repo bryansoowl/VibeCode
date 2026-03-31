@@ -428,6 +428,96 @@ function clearFilters() {
   loadEmails(true);
 }
 
+function setDatePreset(preset, el) {
+  // Clicking an active preset clears it
+  if (el.classList.contains('active')) {
+    currentDateFrom = null;
+    currentDateTo   = null;
+    el.classList.remove('active');
+    updateClearFiltersVisibility();
+    loadEmails(true);
+    return;
+  }
+  // Deactivate all date pills (only one preset at a time)
+  document.querySelectorAll('.el-date-pill').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const today = fmt(now);
+
+  if (preset === 'today') {
+    currentDateFrom = today;
+    currentDateTo   = today;
+  } else if (preset === 'week') {
+    const d = new Date(now); d.setDate(d.getDate() - 7);
+    currentDateFrom = fmt(d);
+    currentDateTo   = today;
+  } else if (preset === 'month') {
+    const d = new Date(now); d.setMonth(d.getMonth() - 1);
+    currentDateFrom = fmt(d);
+    currentDateTo   = today;
+  } else if (preset === '3month') {
+    const d = new Date(now); d.setMonth(d.getMonth() - 3);
+    currentDateFrom = fmt(d);
+    currentDateTo   = today;
+  }
+
+  const customPanel = document.getElementById('custom-date-panel');
+  if (customPanel) customPanel.style.display = 'none';
+  const customPill = document.getElementById('date-custom');
+  if (customPill) customPill.textContent = 'Custom ▾';
+
+  updateClearFiltersVisibility();
+  loadEmails(true);
+}
+
+function toggleCustomDatePicker() {
+  const panel = document.getElementById('custom-date-panel');
+  const pill  = document.getElementById('date-custom');
+  if (!panel) return;
+
+  const isOpen = panel.style.display !== 'none';
+
+  // If open AND a custom range is active, clicking '✕' clears it
+  if (isOpen && (currentDateFrom || currentDateTo)) {
+    currentDateFrom = null;
+    currentDateTo   = null;
+    panel.style.display = 'none';
+    if (pill) pill.textContent = 'Custom ▾';
+    document.querySelectorAll('.el-date-pill').forEach(i => i.classList.remove('active'));
+    updateClearFiltersVisibility();
+    loadEmails(true);
+    return;
+  }
+
+  panel.style.display = isOpen ? 'none' : '';
+}
+
+function applyCustomDates() {
+  const fromVal = document.getElementById('date-from-input')?.value;
+  const toVal   = document.getElementById('date-to-input')?.value;
+
+  currentDateFrom = fromVal || null;
+  currentDateTo   = toVal   || null;
+
+  const panel = document.getElementById('custom-date-panel');
+  const pill  = document.getElementById('date-custom');
+
+  document.querySelectorAll('.el-date-pill').forEach(i => i.classList.remove('active'));
+
+  if (currentDateFrom || currentDateTo) {
+    if (pill) { pill.textContent = 'Custom ✕'; pill.classList.add('active'); }
+  } else {
+    if (pill) pill.textContent = 'Custom ▾';
+  }
+
+  if (panel) panel.style.display = 'none';
+  updateClearFiltersVisibility();
+  loadEmails(true);
+}
+
 function setupInfiniteScroll() {
   const sentinel = document.getElementById('scroll-sentinel');
   if (!sentinel) return;
