@@ -109,15 +109,18 @@ async function fetchAccounts() {
   return apiFetch('/api/accounts');
 }
 
-async function fetchEmails({ category, folder, tab, important, accountId, search, unread, limit = 50, offset = 0 } = {}) {
+async function fetchEmails({ category, folder, tab, important, accountId, accountIds, search, unread, dateFrom, dateTo, limit = 50, offset = 0 } = {}) {
   const p = new URLSearchParams();
-  if (category)  p.set('category', category);
-  if (folder)    p.set('folder', folder);
-  if (tab)       p.set('tab', tab);
-  if (important) p.set('important', '1');
-  if (accountId) p.set('accountId', accountId);
-  if (search)    p.set('search', search);
-  if (unread)    p.set('unread', '1');
+  if (category)   p.set('category', category);
+  if (folder)     p.set('folder', folder);
+  if (tab)        p.set('tab', tab);
+  if (important)  p.set('important', '1');
+  if (accountId)  p.set('accountId', accountId);
+  if (accountIds) p.set('accountIds', accountIds);
+  if (search)     p.set('search', search);
+  if (unread)     p.set('unread', '1');
+  if (dateFrom)   p.set('dateFrom', dateFrom);
+  if (dateTo)     p.set('dateTo', dateTo);
   p.set('limit', limit);
   p.set('offset', offset);
   return apiFetch('/api/emails?' + p);
@@ -161,6 +164,9 @@ let currentFolder = 'inbox';
 let currentFilter = 'all';
 let currentSearch = '';
 let currentAccountId = null;
+let currentDateFrom   = null;   // 'YYYY-MM-DD' or null
+let currentDateTo     = null;   // 'YYYY-MM-DD' or null
+let currentAccountIds = [];     // [] = all accounts
 let selectedEmailId = null;
 
 let emailCache = [];
@@ -187,14 +193,22 @@ const FOLDER_PARAMS = {
 
 function buildEmailParams(offset = 0) {
   const folderParams = FOLDER_PARAMS[currentFolder] || { folder: 'inbox' };
-  return {
+  const params = {
     ...folderParams,
-    accountId: currentAccountId || undefined,
     search: currentSearch || undefined,
     unread: currentFilter === 'unread' || undefined,
     limit: 50,
     offset,
   };
+  // accountIds takes precedence over accountId (sidebar single-account filter)
+  if (currentAccountIds.length > 0) {
+    params.accountIds = currentAccountIds.join(',');
+  } else if (currentAccountId) {
+    params.accountId = currentAccountId;
+  }
+  if (currentDateFrom) params.dateFrom = currentDateFrom;
+  if (currentDateTo)   params.dateTo   = currentDateTo;
+  return params;
 }
 
 function escHtml(str) {
@@ -348,6 +362,9 @@ function renderList(emails, reset = false) {
 }
 
 function setFolder(f, el) {
+  currentDateFrom = null;
+  currentDateTo   = null;
+  // currentAccountIds intentionally NOT reset — account pills persist across folders
   currentFolder = f;
   currentFilter = 'all';
   document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('active'));
@@ -360,6 +377,12 @@ function setFolder(f, el) {
   document.getElementById('folder-title').textContent = titles[f] || f;
   document.querySelectorAll('.el-filter').forEach(i => i.classList.remove('active'));
   document.getElementById('filter-all').classList.add('active');
+  document.querySelectorAll('.el-date-pill').forEach(i => i.classList.remove('active'));
+  const customPanel = document.getElementById('custom-date-panel');
+  if (customPanel) customPanel.style.display = 'none';
+  const customPill = document.getElementById('date-custom');
+  if (customPill) customPill.textContent = 'Custom ▾';
+  updateClearFiltersVisibility();
   loadEmails(true);
 }
 
@@ -382,6 +405,27 @@ function filterEmails(q) {
   currentSearch = q;
   clearTimeout(searchDebounce);
   searchDebounce = setTimeout(() => loadEmails(true), 300);
+}
+
+function updateClearFiltersVisibility() {
+  const link = document.getElementById('clear-filters-link');
+  if (!link) return;
+  const active = currentDateFrom || currentDateTo || currentAccountIds.length > 0;
+  link.style.display = active ? '' : 'none';
+}
+
+function clearFilters() {
+  currentDateFrom   = null;
+  currentDateTo     = null;
+  currentAccountIds = [];
+  document.querySelectorAll('.el-date-pill').forEach(i => i.classList.remove('active'));
+  const customPanel = document.getElementById('custom-date-panel');
+  if (customPanel) customPanel.style.display = 'none';
+  const customPill = document.getElementById('date-custom');
+  if (customPill) customPill.textContent = 'Custom ▾';
+  renderAccountPills();
+  updateClearFiltersVisibility();
+  loadEmails(true);
 }
 
 function setupInfiniteScroll() {
