@@ -331,7 +331,7 @@ All implementation plans live in `docs/superpowers/plans/`.
 | 4 | **Multi-User Architecture** | User sign-up/sign-in (email+password), per-user AES-256-GCM encrypted data keys, HTTP-only cookie sessions (30-day TTL), email-based password reset, auth middleware on all API routes, OAuth state relay, frontend sign-in page | ✅ Done |
 | 5 | **Account Management UI** | Rename accounts, delete + revoke, re-auth expired tokens, per-account sync status | ✅ Done |
 | 6 | **Notifications + Overdue Detection (Electron)** | Electron desktop app (NSIS installer), system tray, Windows toast notifications, overdue bill banner, deep-link navigation, AI summaries via Gemini 2.0 Flash, Gemini key storage via DPAPI, auto-launch toggle | ✅ Done |
-| 7 | **Search + Filtering Improvements** | Full-text search, date range filters, multi-account filter, saved searches | ⏳ Pending |
+| 7 | **Search + Filtering Improvements** | Full-text in-memory search (sender/subject/snippet), date range filters (presets + custom picker), multi-account filter pills (OR logic) | ✅ Done |
 | 8 | **Hardening + v1.0 Polish** | Rate limiting review, error boundary UI, accessibility pass, performance profiling, v1.0 release | ⏳ Pending |
 | 9 | **Hosted Deployment** | Docker setup, cloud hosting config, privacy-preserving multi-tenant model | ⏳ Pending |
 
@@ -382,7 +382,7 @@ All endpoints are available at `http://localhost:3001` while the app is running.
 | GET | `/api/accounts/connect/outlook` | Start Outlook OAuth flow |
 | DELETE | `/api/accounts/:id` | Remove a connected account and its emails |
 | PATCH | `/api/accounts/:id/label` | Rename an account — body: `{"label":"My Work Gmail"}` |
-| GET | `/api/emails` | List emails — params: `?category=bill\|govt\|receipt\|work`, `?accountId=`, `?search=`, `?limit=50`, `?offset=0` |
+| GET | `/api/emails` | List emails — params: `?category=bill\|govt\|receipt\|work`, `?accountId=`, `?accountIds=id1,id2`, `?search=`, `?dateFrom=YYYY-MM-DD`, `?dateTo=YYYY-MM-DD`, `?unread=1`, `?limit=50`, `?offset=0` |
 | GET | `/api/emails/:id` | Get a single email with decrypted body + parsed bill fields |
 | PATCH | `/api/emails/:id/read` | Mark an email as read |
 | GET | `/api/bills` | List parsed bills — params: `?status=unpaid\|paid\|overdue` |
@@ -650,10 +650,14 @@ Completed so far:
   (sessionStorage dismiss), AI summaries via Gemini 2.0 Flash (safeStorage DPAPI for key), auto-launch
   toggle, contextBridge/preload IPC, net.request() using renderer session. 3 new test files.
   114 tests total passing (110 backend + 4 utils).
+- Plan 7 (Search + Filtering): Full-text in-memory search (sender/subject/snippet), date range
+  filters (today/week/month/3-month presets + custom picker), multi-account filter pills (OR logic,
+  persists across folder switches). GET /api/emails extended with dateFrom/dateTo/accountIds/search
+  params — fast SQL path when no search, in-memory decrypt+filter path when search present. 17 new
+  tests. 143 tests total passing (139 backend + 4 utils).
 
-Today's goal is Plan 7: Search + Filtering Improvements.
-Add full-text search, date range filters, multi-account filter.
-See docs/superpowers/specs/ for the design spec once it is written.
+Today's goal is Plan 8: Hardening + v1.0 Polish.
+Rate limiting review, error boundary UI, accessibility pass, performance profiling, v1.0 release.
 ```
 
 
