@@ -3,24 +3,71 @@ import { google } from 'googleapis'
 import { getAuthedClient } from '../auth/gmail'
 import type { NormalizedEmail } from './types'
 
-const FETCH_LIMIT = 50  // per sync run
+const FETCH_LIMIT = 50  // per full sync run
 
 export async function fetchNewEmails(
   accountId: string,
-  sinceMs: number | null
-): Promise<NormalizedEmail[]> {
+  sinceMs: number | null,
+  historyId: string | null
+): Promise<{ emails: NormalizedEmail[], newHistoryId: string | null }> {
   const auth = await getAuthedClient(accountId)
   const gmail = google.gmail({ version: 'v1', auth })
 
+  // ── Incremental mode (History API) ──────────────────────────────────────────
+  // When we have a historyId, use users.history.list — only fetches new message
+  // IDs since the last sync. Very cheap: 1 API call if nothing new.
+  if (historyId) {
+    try {
+      const history = await gmail.users.history.list({
+        userId: 'me',
+        startHistoryId: historyId,
+        historyTypes: ['messageAdded'],
+      })
+
+      const newHistoryId = history.data.historyId ?? historyId
+      const records = history.data.history ?? []
+
+      // Collect unique IDs of newly added messages
+      const messageIds = new Set<string>()
+      for (const record of records) {
+        for (const added of record.messagesAdded ?? []) {
+          if (added.message?.id) messageIds.add(added.message.id)
+        }
+      }
+
+      if (messageIds.size === 0) return { emails: [], newHistoryId }
+
+      // Fetch full details only for the new messages
+      const emails: NormalizedEmail[] = []
+      for (const id of messageIds) {
+        try {
+          const full = await gmail.users.messages.get({ userId: 'me', id, format: 'full' })
+          emails.push(normalizeGmailMessage(accountId, full.data))
+        } catch { /* skip individual failures */ }
+      }
+
+      return { emails, newHistoryId }
+    } catch (err: any) {
+      // 404 means historyId is too old — fall through to full sync below
+      if (err.code !== 404 && err.status !== 404) throw err
+      console.log(`[gmail] historyId stale for ${accountId}, falling back to full sync`)
+    }
+  }
+
+  // ── Full sync ────────────────────────────────────────────────────────────────
+  // Gmail's `after:` resolves to a date (midnight), exclusive. Subtract 24 h so
+  // emails received on the same calendar day as the last sync are still fetched.
+  // INSERT OR IGNORE in the DB deduplicates anything already stored.
+  const BUFFER_MS = 24 * 60 * 60 * 1000
   const query = sinceMs
-    ? `after:${Math.floor(sinceMs / 1000)}`
+    ? `after:${Math.floor((sinceMs - BUFFER_MS) / 1000)}`
     : 'newer_than:30d'
 
   const list = await gmail.users.messages.list({
     userId: 'me',
     q: query,
     maxResults: FETCH_LIMIT,
-    includeSpamTrash: true,  // fetch SPAM and TRASH so we can correctly tag folder
+    includeSpamTrash: true,
   })
 
   const messages = list.data.messages ?? []
@@ -32,11 +79,17 @@ export async function fetchNewEmails(
       id: msg.id!,
       format: 'full',
     })
-
     emails.push(normalizeGmailMessage(accountId, full.data))
   }
 
-  return emails
+  // Capture current historyId so future syncs can use incremental mode
+  let newHistoryId: string | null = null
+  try {
+    const profile = await gmail.users.getProfile({ userId: 'me' })
+    newHistoryId = profile.data.historyId ?? null
+  } catch { /* non-fatal */ }
+
+  return { emails, newHistoryId }
 }
 
 function gmailFolder(labelIds: string[]): import('./types').EmailFolder {
@@ -47,9 +100,6 @@ function gmailFolder(labelIds: string[]): import('./types').EmailFolder {
   return 'inbox'
 }
 
-// Maps Gmail's CATEGORY_* labels to InboxMY tabs.
-// Note: SPAM emails do NOT carry CATEGORY_PROMOTIONS — they are mutually exclusive.
-// A message can have both INBOX and a CATEGORY_* label simultaneously.
 function gmailTab(labelIds: string[]): import('./types').EmailTab {
   if (labelIds.includes('CATEGORY_PROMOTIONS')) return 'promotions'
   if (labelIds.includes('CATEGORY_SOCIAL'))     return 'social'
@@ -84,7 +134,7 @@ function normalizeGmailMessage(accountId: string, msg: any): NormalizedEmail {
     folder: gmailFolder(labelIds),
     tab: gmailTab(labelIds),
     isImportant: labelIds.includes('IMPORTANT'),
-    category: null,  // set by parser
+    category: null,
     bodyHtml: htmlBody,
     bodyText: textBody,
     snippet: msg.snippet ?? null,

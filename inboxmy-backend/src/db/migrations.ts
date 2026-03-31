@@ -75,6 +75,8 @@ const MIGRATIONS: string[] = [
   `,
   // Migration 5: per-account token expiry flag
   `ALTER TABLE accounts ADD COLUMN token_expired INTEGER NOT NULL DEFAULT 0;`,
+  // Migration 6: Gmail History API ID for incremental sync
+  `ALTER TABLE accounts ADD COLUMN gmail_history_id TEXT;`,
 ]
 
 export function runMigrations(db: Database.Database): void {
