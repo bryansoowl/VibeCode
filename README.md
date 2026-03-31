@@ -14,6 +14,7 @@ Aggregates Gmail and Outlook accounts, parses Malaysian bills (TNB, Unifi, Maxis
 - **System tray** — app runs in the background, accessible from the taskbar tray
 - **Auto-launch at startup** — optional, toggleable in Settings
 - **Deep link navigation** — clicking a toast jumps directly to that bill in the app
+- **Search + filtering** — full-text search across sender/subject/snippet; date range presets (today/week/month/3 months) + custom picker; multi-account filter pills with OR logic
 - **Privacy** — all data stored locally; API bound to `127.0.0.1`; no telemetry; no InboxMY servers
 
 ---
@@ -90,14 +91,14 @@ Produces a Windows installer (`dist/InboxMY Setup x.x.x.exe`) using `electron-bu
 | Electron main | `electron/main.js` | BrowserWindow, system tray, toast notifications, IPC, auto-launch, backend spawner |
 | Preload bridge | `electron/preload.js` | contextBridge — `window.inboxmy.*` API (7 methods) |
 | Electron utils | `electron/utils.js` | `makeNotificationKey` — deduplication key with UTC date handling |
-| Frontend API client | `frontend/app.js` | Vanilla JS — fetches all panels from the backend API, overdue banner, deep-link navigation, AI settings |
-| Dashboard | `frontend/index.html` | Full email dashboard — accounts, email list, email detail, bills panel, sync button, settings |
+| Frontend API client | `frontend/app.js` | Vanilla JS — fetches all panels from the backend API, overdue banner, deep-link navigation, AI settings, date/account filters |
+| Dashboard | `frontend/index.html` | Full email dashboard — accounts, email list, email detail, bills panel, sync button, settings, date filter row |
 
 ---
 
 ## Running the Tests
 
-### Backend tests (110 tests)
+### Backend tests (139 tests)
 
 ```powershell
 cd inboxmy-backend
@@ -113,7 +114,7 @@ npm test
 npm run test:utils
 ```
 
-### Combined: 114 tests total
+### Combined: 143 tests total
 
 Test coverage includes: encryption, bill parsers, API routes, auth middleware, sync engine, AI notifier, notification scheduler utils.
 
@@ -258,6 +259,34 @@ Manual test checklist for Plan 6 (requires running Electron app):
 10. System tray icon visible → right-click → "Show InboxMY" and "Quit" options work
 11. Close window (×) → app minimises to tray, does NOT quit
 12. Quit via tray menu → app fully exits
+
+---
+
+### Plan 7 — Search + Filtering tests
+
+| Test file | What it tests |
+|---|---|
+| `tests/routes/emails.test.ts` | `dateFrom`/`dateTo` boundary + inversion + validation; `accountIds` single/multi/cross-user/empty; in-memory search on sender/subject/snippet; search + date + accountIds combined; `total` count; pagination |
+
+To run just Plan 7 tests:
+```powershell
+$env:ENCRYPTION_KEY="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+$env:DATA_DIR="./data-test"
+npx vitest run tests/routes/emails.test.ts
+```
+
+Manual test checklist for Plan 7 (requires running app):
+
+1. Date preset pills appear between search bar and the All/Unread/Bills row
+2. Click **Today** → highlights, list reloads with today's emails only; click again → deactivates
+3. **This week / This month / Last 3 months** each filter correctly
+4. Click **Custom ▾** → date inputs open; fill dates + Apply → list filters; pill shows **Custom ✕**; click → clears
+5. Switch sidebar folder → date pills reset automatically
+6. Search + date preset combined → only matching emails within the date range
+7. 2+ accounts connected → account pills appear on the right side of the filter row
+8. Click one pill → that account's emails only; click second pill → both accounts (OR logic)
+9. Click active pill → deactivates; **× Clear filters** link visible when any filter active; click → resets date + account filters (search box and unread toggle unchanged)
+10. With only 1 account → no account pills rendered
 
 ---
 
