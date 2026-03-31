@@ -233,3 +233,115 @@ describe('GET /api/emails — accountIds filter', () => {
     expect(res.body.emails).toHaveLength(2)
   })
 })
+
+describe('GET /api/emails — in-memory search', () => {
+  it('search matches on sender field', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acctId = seedAccount(userId)
+    seedEmail(userId, { accountId: acctId, sender: 'bills@tnb.com.my', dataKey })
+    seedEmail(userId, { accountId: acctId, sender: 'noreply@shopee.com', dataKey })
+
+    const res = await agent.get('/api/emails?search=tnb')
+    expect(res.status).toBe(200)
+    expect(res.body.emails).toHaveLength(1)
+    expect(res.body.emails[0].sender).toBe('bills@tnb.com.my')
+  })
+
+  it('search matches on decrypted subject', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acctId = seedAccount(userId)
+    seedEmail(userId, { accountId: acctId, subject: 'Your TNB bill is ready', dataKey })
+    seedEmail(userId, { accountId: acctId, subject: 'Welcome to Unifi', dataKey })
+
+    const res = await agent.get('/api/emails?search=TNB+bill')
+    expect(res.status).toBe(200)
+    expect(res.body.emails).toHaveLength(1)
+    expect(res.body.emails[0].subject).toBe('Your TNB bill is ready')
+  })
+
+  it('search matches on decrypted snippet', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acctId = seedAccount(userId)
+    seedEmail(userId, { accountId: acctId, subject: 'Invoice', snippet: 'Amount due: RM 45.60', dataKey })
+    seedEmail(userId, { accountId: acctId, subject: 'Newsletter', snippet: 'Check out our latest deals', dataKey })
+
+    const res = await agent.get('/api/emails?search=RM+45')
+    expect(res.status).toBe(200)
+    expect(res.body.emails).toHaveLength(1)
+    expect(res.body.emails[0].snippet).toBe('Amount due: RM 45.60')
+  })
+
+  it('search is case-insensitive', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acctId = seedAccount(userId)
+    seedEmail(userId, { accountId: acctId, subject: 'Your LHDN Notice', dataKey })
+
+    const res = await agent.get('/api/emails?search=lhdn')
+    expect(res.status).toBe(200)
+    expect(res.body.emails).toHaveLength(1)
+  })
+
+  it('search combined with dateFrom narrows results', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acctId = seedAccount(userId)
+    // Both match search, but only one is within date range
+    seedEmail(userId, { accountId: acctId, subject: 'TNB March bill', dataKey, receivedAt: new Date('2026-03-15T10:00:00+08:00').getTime() })
+    seedEmail(userId, { accountId: acctId, subject: 'TNB January bill', dataKey, receivedAt: new Date('2026-01-15T10:00:00+08:00').getTime() })
+
+    const res = await agent.get('/api/emails?search=TNB&dateFrom=2026-03-01')
+    expect(res.status).toBe(200)
+    expect(res.body.emails).toHaveLength(1)
+    expect(res.body.emails[0].subject).toBe('TNB March bill')
+  })
+
+  it('search combined with accountIds returns matching emails in specified accounts only', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acct1 = seedAccount(userId)
+    const acct2 = seedAccount(userId)
+    seedEmail(userId, { accountId: acct1, subject: 'Unifi invoice', dataKey })
+    seedEmail(userId, { accountId: acct2, subject: 'Unifi invoice', dataKey })  // same subject, different account
+
+    const res = await agent.get(`/api/emails?search=Unifi&accountIds=${acct1}`)
+    expect(res.status).toBe(200)
+    expect(res.body.emails).toHaveLength(1)
+    expect(res.body.emails[0].account_id).toBe(acct1)
+  })
+
+  it('total reflects the in-memory filtered count, not the raw SQL count', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acctId = seedAccount(userId)
+    // 5 emails match search, 3 do not
+    for (let i = 0; i < 5; i++) {
+      seedEmail(userId, { accountId: acctId, subject: 'Celcom bill', dataKey })
+    }
+    for (let i = 0; i < 3; i++) {
+      seedEmail(userId, { accountId: acctId, subject: 'Newsletter', dataKey })
+    }
+
+    const res = await agent.get('/api/emails?search=Celcom&limit=2&offset=0')
+    expect(res.status).toBe(200)
+    expect(res.body.total).toBe(5)    // only matching emails, not all 8
+    expect(res.body.emails).toHaveLength(2)  // respects limit
+  })
+
+  it('in-memory pagination: offset slices the filtered set', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acctId = seedAccount(userId)
+    for (let i = 1; i <= 5; i++) {
+      seedEmail(userId, { accountId: acctId, subject: `Maxis bill ${i}`, dataKey, receivedAt: Date.now() - i * 1000 })
+    }
+
+    const page1 = await agent.get('/api/emails?search=Maxis&limit=3&offset=0')
+    const page2 = await agent.get('/api/emails?search=Maxis&limit=3&offset=3')
+
+    expect(page1.body.emails).toHaveLength(3)
+    expect(page2.body.emails).toHaveLength(2)
+    expect(page1.body.total).toBe(5)
+    expect(page2.body.total).toBe(5)
+
+    // No overlap between pages
+    const p1ids = page1.body.emails.map((e: any) => e.id)
+    const p2ids = page2.body.emails.map((e: any) => e.id)
+    expect(p1ids.some((id: string) => p2ids.includes(id))).toBe(false)
+  })
+})
