@@ -81,6 +81,7 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 .el-filter{padding:4px 11px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid transparent;white-space:nowrap;transition:all .15s;color:var(--ink3);background:transparent}
 .el-filter.active{background:#fff;color:var(--ink);border-color:var(--border);box-shadow:0 1px 3px rgba(26,22,18,.06)}
 .el-filter:hover:not(.active){background:var(--cream3)}
+.el-acct-pills{display:flex;gap:4px;margin-left:auto;flex-shrink:0}
 .el-items{flex:1;overflow-y:auto}
 .el-items::-webkit-scrollbar{width:3px}
 .el-items::-webkit-scrollbar-thumb{background:var(--cream3)}
@@ -315,6 +316,7 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
       <div class="el-filter" onclick="setFilter('bills', this)">Bills</div>
       <div class="el-filter" onclick="setFilter('govt', this)">Govt</div>
       <div class="el-filter" onclick="setFilter('receipts', this)">Receipts</div>
+      <div class="el-acct-pills" id="el-acct-pills"></div>
     </div>
     <div class="el-items" id="el-items"></div>
   </div>

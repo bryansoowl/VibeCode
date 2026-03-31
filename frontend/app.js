@@ -518,6 +518,40 @@ function applyCustomDates() {
   loadEmails(true);
 }
 
+function renderAccountPills() {
+  const container = document.getElementById('el-acct-pills');
+  if (!container) return;
+  container.innerHTML = '';
+
+  // Hide pills when only 0 or 1 account is connected (no value in filtering)
+  if (accountsData.length <= 1) return;
+
+  accountsData.forEach(acct => {
+    const label = (acct.label || acct.email || '').slice(0, 20);
+    const isActive = currentAccountIds.includes(acct.id);
+
+    const pill = document.createElement('div');
+    pill.className = 'el-filter' + (isActive ? ' active' : '');
+    pill.title = acct.email || '';
+    pill.textContent = label;
+    pill.onclick = () => toggleAccountPill(acct.id, pill);
+    container.appendChild(pill);
+  });
+}
+
+function toggleAccountPill(accountId, el) {
+  const idx = currentAccountIds.indexOf(accountId);
+  if (idx === -1) {
+    currentAccountIds.push(accountId);
+    el.classList.add('active');
+  } else {
+    currentAccountIds.splice(idx, 1);
+    el.classList.remove('active');
+  }
+  updateClearFiltersVisibility();
+  loadEmails(true);
+}
+
 function setupInfiniteScroll() {
   const sentinel = document.getElementById('scroll-sentinel');
   if (!sentinel) return;
@@ -803,6 +837,8 @@ function renderAccounts() {
   // Hide connect links if already at 6 accounts
   const connectDiv = document.getElementById('accounts-connect');
   if (connectDiv) connectDiv.style.display = accountsData.length >= 6 ? 'none' : '';
+
+  renderAccountPills();
 }
 
 // ── BILLS PANEL ───────────────────────────────────────────────────────────────
