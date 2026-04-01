@@ -8,7 +8,7 @@ export const emailsRouter = Router()
 
 const listQuery = z.object({
   category:   z.enum(['bill', 'govt', 'receipt', 'work']).optional(),
-  folder:     z.enum(['inbox', 'sent', 'spam', 'draft', 'trash']).optional(),
+  folder:     z.enum(['inbox', 'sent', 'spam', 'draft', 'trash', 'archive']).optional(),
   tab:        z.enum(['primary', 'promotions', 'social', 'updates', 'forums']).optional(),
   important:  z.enum(['1', 'true']).optional(),
   accountId:  z.string().optional(),
@@ -22,8 +22,8 @@ const listQuery = z.object({
 })
 
 const EMAIL_SELECT = `SELECT e.id, e.account_id, e.thread_id, e.subject_enc,
-  e.sender, e.sender_name, e.received_at, e.is_read, e.category,
-  e.snippet, e.raw_size
+  e.sender, e.sender_name, e.received_at, e.is_read, e.folder, e.tab,
+  e.is_important, e.category, e.snippet, e.raw_size
   FROM emails e
   JOIN accounts a ON a.id = e.account_id`
 
@@ -170,5 +170,24 @@ emailsRouter.patch('/:id/read', (req: Request, res: Response) => {
     UPDATE emails SET is_read = 1
     WHERE id = ? AND account_id IN (SELECT id FROM accounts WHERE user_id = ?)
   `).run(req.params.id, user.id)
+  res.json({ ok: true })
+})
+
+const folderBody = z.object({
+  folder: z.enum(['inbox', 'sent', 'spam', 'draft', 'trash', 'archive']),
+})
+
+emailsRouter.patch('/:id/folder', (req: Request, res: Response) => {
+  const parsed = folderBody.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+
+  const user = (req as any).user
+  const db = getDb()
+  const result = db.prepare(`
+    UPDATE emails SET folder = ?
+    WHERE id = ? AND account_id IN (SELECT id FROM accounts WHERE user_id = ?)
+  `).run(parsed.data.folder, req.params.id, user.id)
+
+  if (result.changes === 0) return res.status(404).json({ error: 'Email not found' })
   res.json({ ok: true })
 })
