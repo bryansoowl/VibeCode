@@ -6,9 +6,11 @@ import { z } from 'zod'
 
 export const emailsRouter = Router()
 
+const FOLDER_VALUES = ['inbox', 'sent', 'spam', 'draft', 'trash', 'archive'] as const
+
 const listQuery = z.object({
   category:   z.enum(['bill', 'govt', 'receipt', 'work']).optional(),
-  folder:     z.enum(['inbox', 'sent', 'spam', 'draft', 'trash', 'archive']).optional(),
+  folder:     z.enum(FOLDER_VALUES).optional(),
   tab:        z.enum(['primary', 'promotions', 'social', 'updates', 'forums']).optional(),
   important:  z.enum(['1', 'true']).optional(),
   accountId:  z.string().optional(),
@@ -174,7 +176,7 @@ emailsRouter.patch('/:id/read', (req: Request, res: Response) => {
 })
 
 const folderBody = z.object({
-  folder: z.enum(['inbox', 'sent', 'spam', 'draft', 'trash', 'archive']),
+  folder: z.enum(FOLDER_VALUES),
 })
 
 emailsRouter.patch('/:id/folder', (req: Request, res: Response) => {
