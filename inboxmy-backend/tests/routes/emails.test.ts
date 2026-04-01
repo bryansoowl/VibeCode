@@ -345,3 +345,363 @@ describe('GET /api/emails — in-memory search', () => {
     expect(p1ids.some((id: string) => p2ids.includes(id))).toBe(false)
   })
 })
+
+describe('GET /api/emails — basic list', () => {
+  it('returns 401 without session', async () => {
+    const { default: request } = await import('supertest')
+    const { app } = await import('../../src/server')
+    const res = await request(app).get('/api/emails')
+    expect(res.status).toBe(401)
+  })
+
+  it('returns paginated response shape: { emails, limit, offset, total }', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acctId = seedAccount(userId)
+    for (let i = 0; i < 3; i++) {
+      seedEmail(userId, { accountId: acctId, dataKey })
+    }
+
+    const res = await agent.get('/api/emails?limit=50&offset=0')
+    expect(res.status).toBe(200)
+    expect(res.body).toHaveProperty('emails')
+    expect(res.body).toHaveProperty('total')
+    expect(res.body).toHaveProperty('limit', 50)
+    expect(res.body).toHaveProperty('offset', 0)
+    expect(Array.isArray(res.body.emails)).toBe(true)
+    expect(res.body.emails).toHaveLength(3)
+    expect(res.body.total).toBe(3)
+  })
+
+  it('each email has a decrypted subject and no subject_enc', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acctId = seedAccount(userId)
+    seedEmail(userId, { accountId: acctId, subject: 'Hello World', dataKey })
+
+    const res = await agent.get('/api/emails')
+    expect(res.status).toBe(200)
+    expect(res.body.emails[0].subject).toBe('Hello World')
+    expect(res.body.emails[0].subject_enc).toBeUndefined()
+  })
+
+  it('respects limit and offset for pagination', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acctId = seedAccount(userId)
+    for (let i = 0; i < 5; i++) {
+      seedEmail(userId, { accountId: acctId, dataKey, receivedAt: Date.now() - i * 1000 })
+    }
+
+    const page1 = await agent.get('/api/emails?limit=3&offset=0')
+    const page2 = await agent.get('/api/emails?limit=3&offset=3')
+
+    expect(page1.body.emails).toHaveLength(3)
+    expect(page2.body.emails).toHaveLength(2)
+    expect(page1.body.total).toBe(5)
+  })
+
+  it('does not return another user\'s emails', async () => {
+    const { id: userId1 } = await createTestUser()
+    const { agent: agent2 } = await createTestUser()
+    seedEmail(userId1, {})
+
+    const res = await agent2.get('/api/emails')
+    expect(res.status).toBe(200)
+    expect(res.body.emails).toHaveLength(0)
+  })
+
+  it('returns 400 for limit above 100', async () => {
+    const { agent } = await createTestUser()
+    const res = await agent.get('/api/emails?limit=200')
+    expect(res.status).toBe(400)
+  })
+})
+
+describe('GET /api/emails/:id', () => {
+  it('returns 401 without session', async () => {
+    const { default: request } = await import('supertest')
+    const { app } = await import('../../src/server')
+    const res = await request(app).get('/api/emails/some-id')
+    expect(res.status).toBe(401)
+  })
+
+  it('returns 404 for a non-existent email id', async () => {
+    const { agent } = await createTestUser()
+    const res = await agent.get('/api/emails/does-not-exist')
+    expect(res.status).toBe(404)
+  })
+
+  it('returns the email with decrypted subject when found', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acctId = seedAccount(userId)
+    const { emailId } = seedEmail(userId, { accountId: acctId, subject: 'My TNB bill', dataKey })
+
+    const res = await agent.get(`/api/emails/${emailId}`)
+    expect(res.status).toBe(200)
+    expect(res.body.id).toBe(emailId)
+    expect(res.body.subject).toBe('My TNB bill')
+    expect(res.body.subject_enc).toBeUndefined()
+  })
+
+  it('returns 404 when the email belongs to a different user', async () => {
+    const { id: userId1 } = await createTestUser()
+    const { agent: agent2 } = await createTestUser()
+    const acctId = seedAccount(userId1)
+    const { emailId } = seedEmail(userId1, { accountId: acctId })
+
+    const res = await agent2.get(`/api/emails/${emailId}`)
+    expect(res.status).toBe(404)
+  })
+})
+
+describe('PATCH /api/emails/:id/read', () => {
+  it('returns 401 without session', async () => {
+    const { default: request } = await import('supertest')
+    const { app } = await import('../../src/server')
+    const res = await request(app).patch('/api/emails/some-id/read')
+    expect(res.status).toBe(401)
+  })
+
+  it('marks an unread email as read', async () => {
+    const { agent, id: userId } = await createTestUser()
+    const acctId = seedAccount(userId)
+    const { emailId } = seedEmail(userId, { accountId: acctId, isRead: false })
+
+    const res = await agent.patch(`/api/emails/${emailId}/read`)
+    expect(res.status).toBe(200)
+    expect(res.body.ok).toBe(true)
+
+    const row = getDb().prepare('SELECT is_read FROM emails WHERE id = ?').get(emailId) as any
+    expect(row.is_read).toBe(1)
+  })
+
+  it('is idempotent — marking an already-read email read returns 200', async () => {
+    const { agent, id: userId } = await createTestUser()
+    const acctId = seedAccount(userId)
+    const { emailId } = seedEmail(userId, { accountId: acctId, isRead: true })
+
+    const res = await agent.patch(`/api/emails/${emailId}/read`)
+    expect(res.status).toBe(200)
+    expect(res.body.ok).toBe(true)
+  })
+
+  it('silently ignores an email that belongs to another user', async () => {
+    const { id: userId1 } = await createTestUser()
+    const { agent: agent2 } = await createTestUser()
+    const acctId = seedAccount(userId1)
+    const { emailId } = seedEmail(userId1, { accountId: acctId, isRead: false })
+
+    // Should return 200 (no error), but the row should not have changed
+    const res = await agent2.patch(`/api/emails/${emailId}/read`)
+    expect(res.status).toBe(200)
+
+    const row = getDb().prepare('SELECT is_read FROM emails WHERE id = ?').get(emailId) as any
+    expect(row.is_read).toBe(0) // still unread
+  })
+})
+
+describe('DELETE /api/emails', () => {
+  it('returns 401 without session', async () => {
+    const { default: request } = await import('supertest')
+    const { app } = await import('../../src/server')
+    const res = await request(app).delete('/api/emails')
+    expect(res.status).toBe(401)
+  })
+
+  it('deletes all emails for the current user', async () => {
+    const { agent, id: userId } = await createTestUser()
+    const acctId = seedAccount(userId)
+    seedEmail(userId, { accountId: acctId })
+    seedEmail(userId, { accountId: acctId })
+
+    const res = await agent.delete('/api/emails')
+    expect(res.status).toBe(200)
+    expect(res.body.ok).toBe(true)
+
+    const count = getDb().prepare(
+      'SELECT COUNT(*) as n FROM emails WHERE account_id = ?'
+    ).get(acctId) as any
+    expect(count.n).toBe(0)
+  })
+
+  it('resets last_synced on all accounts for the current user', async () => {
+    const { agent, id: userId } = await createTestUser()
+    const acctId = seedAccount(userId)
+    getDb().prepare('UPDATE accounts SET last_synced = ? WHERE id = ?').run(Date.now(), acctId)
+
+    await agent.delete('/api/emails')
+
+    const row = getDb().prepare('SELECT last_synced FROM accounts WHERE id = ?').get(acctId) as any
+    expect(row.last_synced).toBeNull()
+  })
+
+  it('does not delete another user\'s emails', async () => {
+    const { id: userId1 } = await createTestUser()
+    const { agent: agent2 } = await createTestUser()
+    const acctId = seedAccount(userId1)
+    seedEmail(userId1, { accountId: acctId })
+
+    await agent2.delete('/api/emails')
+
+    const count = getDb().prepare(
+      'SELECT COUNT(*) as n FROM emails WHERE account_id = ?'
+    ).get(acctId) as any
+    expect(count.n).toBe(1) // still there
+  })
+})
+
+describe('GET /api/emails — folder filter', () => {
+  it('folder=inbox returns only inbox emails', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acctId = seedAccount(userId)
+    seedEmail(userId, { accountId: acctId, folder: 'inbox', dataKey })
+    seedEmail(userId, { accountId: acctId, folder: 'spam', dataKey })
+    seedEmail(userId, { accountId: acctId, folder: 'sent', dataKey })
+
+    const res = await agent.get('/api/emails?folder=inbox')
+    expect(res.status).toBe(200)
+    expect(res.body.emails.every((e: any) => e.folder === 'inbox')).toBe(true)
+    expect(res.body.emails).toHaveLength(1)
+  })
+
+  it('folder=spam returns only spam emails', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acctId = seedAccount(userId)
+    seedEmail(userId, { accountId: acctId, folder: 'spam', dataKey })
+    seedEmail(userId, { accountId: acctId, folder: 'inbox', dataKey })
+
+    const res = await agent.get('/api/emails?folder=spam')
+    expect(res.status).toBe(200)
+    expect(res.body.emails).toHaveLength(1)
+    expect(res.body.emails[0].folder).toBe('spam')
+  })
+
+  it('folder=sent returns only sent emails', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acctId = seedAccount(userId)
+    seedEmail(userId, { accountId: acctId, folder: 'sent', dataKey })
+    seedEmail(userId, { accountId: acctId, folder: 'inbox', dataKey })
+
+    const res = await agent.get('/api/emails?folder=sent')
+    expect(res.status).toBe(200)
+    expect(res.body.emails).toHaveLength(1)
+    expect(res.body.emails[0].folder).toBe('sent')
+  })
+
+  it('returns 400 for an invalid folder value', async () => {
+    const { agent } = await createTestUser()
+    const res = await agent.get('/api/emails?folder=invalid')
+    expect(res.status).toBe(400)
+  })
+})
+
+describe('GET /api/emails — tab filter', () => {
+  it('tab=promotions returns only promotions-tab emails', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acctId = seedAccount(userId)
+    seedEmail(userId, { accountId: acctId, tab: 'promotions', dataKey })
+    seedEmail(userId, { accountId: acctId, tab: 'primary', dataKey })
+
+    const res = await agent.get('/api/emails?tab=promotions')
+    expect(res.status).toBe(200)
+    expect(res.body.emails).toHaveLength(1)
+    expect(res.body.emails[0].tab).toBe('promotions')
+  })
+
+  it('tab=primary returns only primary-tab emails', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acctId = seedAccount(userId)
+    seedEmail(userId, { accountId: acctId, tab: 'primary', dataKey })
+    seedEmail(userId, { accountId: acctId, tab: 'social', dataKey })
+
+    const res = await agent.get('/api/emails?tab=primary')
+    expect(res.status).toBe(200)
+    expect(res.body.emails).toHaveLength(1)
+    expect(res.body.emails[0].tab).toBe('primary')
+  })
+
+  it('returns 400 for an invalid tab value', async () => {
+    const { agent } = await createTestUser()
+    const res = await agent.get('/api/emails?tab=badtab')
+    expect(res.status).toBe(400)
+  })
+})
+
+describe('GET /api/emails — unread filter', () => {
+  it('unread=1 returns only unread emails', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acctId = seedAccount(userId)
+    seedEmail(userId, { accountId: acctId, isRead: false, dataKey })
+    seedEmail(userId, { accountId: acctId, isRead: false, dataKey })
+    seedEmail(userId, { accountId: acctId, isRead: true, dataKey })
+
+    const res = await agent.get('/api/emails?unread=1')
+    expect(res.status).toBe(200)
+    expect(res.body.emails).toHaveLength(2)
+    expect(res.body.emails.every((e: any) => e.is_read === 0)).toBe(true)
+  })
+
+  it('unread=true also works as the flag value', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acctId = seedAccount(userId)
+    seedEmail(userId, { accountId: acctId, isRead: false, dataKey })
+    seedEmail(userId, { accountId: acctId, isRead: true, dataKey })
+
+    const res = await agent.get('/api/emails?unread=true')
+    expect(res.status).toBe(200)
+    expect(res.body.emails).toHaveLength(1)
+  })
+
+  it('without unread filter returns both read and unread', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const acctId = seedAccount(userId)
+    seedEmail(userId, { accountId: acctId, isRead: false, dataKey })
+    seedEmail(userId, { accountId: acctId, isRead: true, dataKey })
+
+    const res = await agent.get('/api/emails')
+    expect(res.status).toBe(200)
+    expect(res.body.emails).toHaveLength(2)
+  })
+})
+
+describe('PATCH /api/emails/:id/folder', () => {
+  it('moves email to a valid folder', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const { emailId } = seedEmail(userId, { folder: 'inbox', dataKey })
+    const res = await agent.patch(`/api/emails/${emailId}/folder`).send({ folder: 'archive' })
+    expect(res.status).toBe(200)
+    expect(res.body.ok).toBe(true)
+    const row = getDb().prepare('SELECT folder FROM emails WHERE id = ?').get(emailId) as any
+    expect(row.folder).toBe('archive')
+  })
+
+  it('returns 400 for invalid folder value', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    const { emailId } = seedEmail(userId, { folder: 'inbox', dataKey })
+    const res = await agent.patch(`/api/emails/${emailId}/folder`).send({ folder: 'nope' })
+    expect(res.status).toBe(400)
+  })
+
+  it('returns 404 when email belongs to another user', async () => {
+    const { id: userId1 } = await createTestUser()
+    const { emailId } = seedEmail(userId1, { folder: 'inbox' })
+    const { agent: agent2 } = await createTestUser()
+    const res = await agent2.patch(`/api/emails/${emailId}/folder`).send({ folder: 'trash' })
+    expect(res.status).toBe(404)
+  })
+
+  it('returns 401 without session cookie', async () => {
+    const { default: request } = await import('supertest')
+    const { app } = await import('../../src/server')
+    const res = await request(app).patch(`/api/emails/${randomUUID()}/folder`).send({ folder: 'trash' })
+    expect(res.status).toBe(401)
+  })
+})
+
+describe('GET /api/emails with folder=archive', () => {
+  it('returns 200 and lists archived emails', async () => {
+    const { agent, id: userId, dataKey } = await createTestUser()
+    seedEmail(userId, { folder: 'archive', dataKey })
+    const res = await agent.get('/api/emails?folder=archive')
+    expect(res.status).toBe(200)
+    expect(res.body.emails.length).toBeGreaterThanOrEqual(1)
+  })
+})
