@@ -6,7 +6,7 @@ import { encryptSystem } from '../crypto'
 import { saveToken, loadToken } from './token-store'
 import { config } from '../config'
 
-const SCOPES = ['https://graph.microsoft.com/Mail.Read', 'User.Read', 'offline_access']
+const SCOPES = ['https://graph.microsoft.com/Mail.Read', 'https://graph.microsoft.com/Mail.Send', 'User.Read', 'offline_access']
 
 function getMsalApp() {
   return new ConfidentialClientApplication({
