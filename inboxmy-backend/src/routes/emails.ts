@@ -231,10 +231,10 @@ emailsRouter.patch('/:id/snooze', (req: Request, res: Response) => {
 emailsRouter.delete('/:id/snooze', (req: Request, res: Response) => {
   const user = (req as any).user
   const db = getDb()
-  const result = db.prepare(`
-    UPDATE emails SET snoozed_until = NULL
-    WHERE id = ? AND account_id IN (SELECT id FROM accounts WHERE user_id = ?)
-  `).run(req.params.id, user.id)
-  if (result.changes === 0) return res.status(404).json({ error: 'Email not found' })
+  const email = db.prepare(`
+    SELECT id FROM emails WHERE id = ? AND account_id IN (SELECT id FROM accounts WHERE user_id = ?)
+  `).get(req.params.id, user.id)
+  if (!email) return res.status(404).json({ error: 'Email not found' })
+  db.prepare('UPDATE emails SET snoozed_until = NULL WHERE id = ?').run(req.params.id)
   res.json({ ok: true })
 })

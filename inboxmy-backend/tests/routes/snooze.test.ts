@@ -98,6 +98,15 @@ describe('DELETE /api/emails/:id/snooze', () => {
     const res = await agent2.delete(`/api/emails/${emailId}/snooze`)
     expect(res.status).toBe(404)
   })
+
+  it('returns 200 idempotently when email is not snoozed', async () => {
+    const { agent, id: userId } = await createTestUser()
+    const accountId = seedAccount(userId)
+    const emailId = seedEmail(userId, accountId)  // not snoozed
+    const res = await agent.delete(`/api/emails/${emailId}/snooze`)
+    expect(res.status).toBe(200)
+    expect(res.body.ok).toBe(true)
+  })
 })
 
 describe('GET /api/emails — snooze exclusion', () => {
