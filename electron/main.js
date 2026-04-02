@@ -222,6 +222,22 @@ async function runSyncTick() {
   if (!mainWindow.isDestroyed()) {
     mainWindow.webContents.send('sync-complete')
   }
+
+  // Restore any emails whose snooze time has passed
+  await new Promise((resolve) => {
+    const unsnoozReq = net.request({
+      url: `${BACKEND_URL}/api/emails/unsnooze-due`,
+      method: 'POST',
+      session: winSession,
+    })
+    unsnoozReq.on('response', (res) => {
+      res.on('data', () => {})
+      res.on('end', resolve)
+    })
+    unsnoozReq.on('error', () => resolve())
+    unsnoozReq.setHeader('Content-Length', '0')
+    unsnoozReq.end()
+  })
 }
 
 // Check for due-soon bills and fire notifications (runs every 60 min)
