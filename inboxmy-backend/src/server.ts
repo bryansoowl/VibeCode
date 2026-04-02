@@ -10,6 +10,8 @@ import { emailsRouter } from './routes/emails'
 import { billsRouter } from './routes/bills'
 import { notificationsRouter } from './routes/notifications'
 import { syncRouter } from './routes/sync'
+import { sendRouter } from './routes/send'
+import { labelsRouter } from './routes/labels'
 import { handleCallback as gmailCallback } from './auth/gmail'
 import { handleCallback as outlookCallback } from './auth/outlook'
 import { startScheduler } from './scheduler'
@@ -97,10 +99,12 @@ app.get('/auth/outlook/callback', async (req, res) => {
 // API routes
 app.use('/api', requireAuth)
 app.use('/api/accounts', accountsRouter)
+app.use('/api/emails/send', sendRouter)
 app.use('/api/emails', emailsRouter)
 app.use('/api/bills', billsRouter)
 app.use('/api/notifications', notificationsRouter)
 app.use('/api/sync', syncRouter)
+app.use('/api/labels', labelsRouter)
 
 app.get('/health', (req, res) => res.json({ ok: true, ts: Date.now() }))
 
