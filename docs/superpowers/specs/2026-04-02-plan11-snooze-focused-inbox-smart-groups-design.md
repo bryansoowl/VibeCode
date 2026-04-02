@@ -29,13 +29,14 @@ All three are surfaced through a **Gmail-style right-click context menu** on ema
 
 - New file: `src/routes/labels.ts` — full CRUD for labels + label assignment on emails
 - Additions to `src/routes/emails.ts` — snooze endpoints, `?snoozed=1` param, `?labelId=` param, `labels` array in response
-- Addition to `src/scheduler.ts` — 15-min tick restores emails whose `snoozed_until <= now()`
+- New endpoint `POST /api/emails/unsnooze-due` — called by Electron's sync tick to restore due emails; no request body required, no auth (internal call uses session cookie from Electron's `net.request`)
+- Addition to `electron/main.js` `runSyncTick` — calls `POST /api/emails/unsnooze-due` via `net.request` every 60 seconds alongside the existing sync logic
 
 ### New frontend
 
 - Right-click context menu component in `frontend/app.js` + `frontend/index.html`
 - Snooze submenu (4 presets + custom datetime input)
-- Move to submenu (folder list)
+- Move to submenu (folder list, using canonical `FOLDER_VALUES`)
 - Label as submenu (user labels + inline "New label…")
 - "Focused" and "Snoozed" sidebar entries
 - "Labels" sidebar section — one entry per user label, dynamically loaded
@@ -46,6 +47,7 @@ All three are surfaced through a **Gmail-style right-click context menu** on ema
 
 ```sql
 -- Snooze: nullable timestamp, NULL = not snoozed
+-- Partial index on SQLite 3.8.9+ (well-supported by better-sqlite3)
 ALTER TABLE emails ADD COLUMN snoozed_until INTEGER;
 CREATE INDEX IF NOT EXISTS idx_emails_snoozed ON emails(snoozed_until)
   WHERE snoozed_until IS NOT NULL;
@@ -72,13 +74,23 @@ CREATE INDEX IF NOT EXISTS idx_email_labels_label ON email_labels(label_id);
 
 ### Snooze behaviour
 
-- Snoozed emails are hidden from all normal `GET /api/emails` queries by a default filter: `AND (e.snoozed_until IS NULL)`
-- The `?snoozed=1` param inverts this: `AND (e.snoozed_until IS NOT NULL)`, ignoring `folder`/`tab`
-- The email's original `folder` value is preserved throughout — when un-snoozed it returns exactly where it was
+- Snoozed emails are hidden from all normal `GET /api/emails` queries by a default filter: `AND (e.snoozed_until IS NULL)`. This filter is applied to **both** the fast SQL path and the in-memory search candidate fetch.
+- The `?snoozed=1` param inverts this: `AND (e.snoozed_until IS NOT NULL)`, ignoring `folder`/`tab`. Applies to both paths.
+- When `?search=` and `?snoozed=1` are combined, the search candidate SQL must include `AND (e.snoozed_until IS NOT NULL)` before the in-memory filter runs.
+- The email's original `folder` value is preserved throughout — when un-snoozed, `snoozed_until` is set to `NULL` and the email reappears in its original folder automatically.
 
 ### Labels in email response
 
-`GET /api/emails` and `GET /api/emails/:id` LEFT JOIN `email_labels` + `labels` and return a `labels` array: `[{ id, name, color }]`. Empty array when none assigned.
+`GET /api/emails` and `GET /api/emails/:id` return labels using a correlated subquery (not a LEFT JOIN) to avoid row multiplication on multi-label emails:
+
+```sql
+-- Per email row, fetch labels as JSON array via subquery
+(SELECT json_group_array(json_object('id', l.id, 'name', l.name, 'color', l.color))
+ FROM email_labels el JOIN labels l ON l.id = el.label_id
+ WHERE el.email_id = e.id) AS labels_json
+```
+
+The backend parses `labels_json` (defaulting to `[]` if null) before returning the response. This ensures the row count and `total` field in the list response are never inflated by label joins.
 
 `GET /api/labels` includes a `count` field per label (total emails assigned to that label for the user), used for sidebar badges.
 
@@ -106,30 +118,39 @@ CREATE INDEX IF NOT EXISTS idx_email_labels_label ON email_labels(label_id);
 |--------|------|------|----------|
 | `PATCH` | `/api/emails/:id/snooze` | `{ until: number }` (ms timestamp) | `{ ok: true }` 200 |
 | `DELETE` | `/api/emails/:id/snooze` | — | `{ ok: true }` 200 |
-| `POST` | `/api/emails/:id/labels/:labelId` | — | `{ ok: true }` 201 |
+| `POST` | `/api/emails/:id/labels/:labelId` | — | `{ ok: true }` 200 (`INSERT OR IGNORE` — idempotent, always 200) |
 | `DELETE` | `/api/emails/:id/labels/:labelId` | — | `{ ok: true }` 200 |
 
 **Snooze validation:**
 - `until` must be > `Date.now()` (reject past timestamps with 400)
-- `until` must be < `Date.now() + 365 * 24 * 60 * 60 * 1000` (max 1 year)
+- `until` must be < `Date.now() + 365 * 24 * 60 * 60 * 1000` (max 1 year out)
 
 **`GET /api/emails` changes:**
-- New `?snoozed=1` param: shows only snoozed emails (overrides folder/tab filters)
-- New `?labelId=<id>` param: filters via `email_labels` JOIN, verified against user ownership
-- Default query adds `AND (e.snoozed_until IS NULL)` when `snoozed` param absent
+- New `?snoozed=1` param: shows only snoozed emails (overrides folder/tab filters); applies to both fast SQL path and in-memory search path
+- New `?labelId=<id>` param: filters via `email_labels` JOIN; if `labelId` does not belong to `req.user.id`, returns 404 (consistent with ownership guard pattern across the API)
+- Default query adds `AND (e.snoozed_until IS NULL)` to both fast-path SQL and the in-memory candidate fetch SQL when `snoozed` param absent
+- `labels` field added to every email row via correlated subquery (see Section 2)
+- Badge polling uses `?limit=1` (satisfies Zod `.min(1)` constraint on the list query) and reads the `total` field from the response
 
-### `src/scheduler.ts` addition
+**`GET /api/emails/unread-count` change:**
+- After Migration 7, this endpoint's SQL query must also add `AND (e.snoozed_until IS NULL)` so snoozed-but-unread emails are not counted in the inbox unread badge.
 
-Added to the existing 15-min cron tick:
+### `POST /api/emails/unsnooze-due` (new, in `src/routes/emails.ts`)
 
-```sql
-UPDATE emails
-SET folder = folder, snoozed_until = NULL
-WHERE snoozed_until IS NOT NULL AND snoozed_until <= <now>
-  AND account_id IN (SELECT id FROM accounts WHERE user_id IS NOT NULL)
-```
+- Called internally by Electron's `runSyncTick` via `net.request` with the user's session cookie
+- No request body; protected by `requireAuth` like all `/api/*` routes
+- **Registration:** must be registered before the `GET /:id` wildcard handler inside `emailsRouter`, or follow the `sendRouter` pattern and mount it as a separate router in `server.ts` before `emailsRouter`. Either approach works; the `sendRouter` separate-mount pattern is preferred for consistency.
+- Runs:
+  ```sql
+  UPDATE emails SET snoozed_until = NULL
+  WHERE snoozed_until IS NOT NULL AND snoozed_until <= <now>
+    AND account_id IN (SELECT id FROM accounts WHERE user_id = ?)
+  ```
+- Returns `{ restored: <number of rows updated> }` 200
 
-The `folder` column is preserved — the email returns to wherever it was before being snoozed.
+### `electron/main.js` addition
+
+Inside `runSyncTick` (fires every 60 seconds), add a `net.request` call to `POST /api/emails/unsnooze-due` using the stored session cookie. This mirrors the existing pattern for other internal API calls in `runSchedulerTick`.
 
 ---
 
@@ -152,10 +173,10 @@ The `folder` column is preserved — the email returns to wherever it was before
 │  ⬚  Archive                         │
 │  🗑  Delete                          │
 │  ✉  Mark as unread / Mark as read   │
-│  🕐  Snooze                        ▶ │
+│  🕐  Snooze                        ▶ │  ← submenu
 ├─────────────────────────────────────┤
-│  📁  Move to                        ▶ │
-│  🏷  Label as                       ▶ │
+│  📁  Move to                        ▶ │  ← submenu
+│  🏷  Label as                       ▶ │  ← submenu
 ├─────────────────────────────────────┤
 │  🔍  Find emails from [sender name] │
 └─────────────────────────────────────┘
@@ -178,14 +199,14 @@ Preset times are computed at menu-open time relative to the user's local timezon
 
 ### Move to submenu
 
-Lists: Inbox / Sent / Drafts / Spam / Trash / Archive. Calls `PATCH /api/emails/:id/folder` then removes email from current view.
+Lists the canonical folder values from `FOLDER_VALUES`: `inbox`, `sent`, `draft`, `spam`, `trash`, `archive` (display names mapped in the frontend: "Inbox", "Sent", "Drafts", "Spam", "Trash", "Archive"). Calls `PATCH /api/emails/:id/folder` with the canonical string value, then removes the email from the current view.
 
 ### Label as submenu
 
 - One row per user label with a colored dot; checkmark if already assigned to this email
-- Clicking a checked label removes it; clicking unchecked assigns it
-- "＋ New label…" at the bottom: reveals an inline text input + color picker; Enter creates and immediately assigns the label
-- Re-fetches the label list after create so the sidebar badge count updates
+- Clicking a checked label removes it (`DELETE /api/emails/:id/labels/:labelId`); clicking unchecked assigns it (`POST /api/emails/:id/labels/:labelId`)
+- "＋ New label…" at the bottom: reveals an inline text input; Enter creates the label (`POST /api/labels`) then immediately assigns it
+- Re-fetches `GET /api/labels` after create/delete so sidebar badge counts stay current
 
 ### Plan 10 frontend dependency
 
@@ -222,9 +243,9 @@ The existing `tab` column (set during sync from Gmail/Outlook categorisation) al
 ```
 
 **Badge counts:**
-- Focused unread: `GET /api/emails?folder=inbox&tab=primary&unread=1&limit=1` (uses `total` field)
-- Snoozed total: `GET /api/emails?snoozed=1&limit=1` (uses `total` field)
-- Label counts: returned by `GET /api/labels` in the `count` field
+- Focused unread: `GET /api/emails?folder=inbox&tab=primary&unread=1&limit=1` — reads `total` field; `limit=1` satisfies the Zod `.min(1)` constraint on the list query
+- Snoozed total: `GET /api/emails?snoozed=1&limit=1` — reads `total` field
+- Label counts: returned by `GET /api/labels` in the `count` field — one request, all counts
 
 Labels sidebar section is hidden when the user has no labels. Labels are loaded once on app startup and refreshed after create/delete.
 
@@ -236,16 +257,15 @@ Labels sidebar section is hidden when the user has no labels. Labels are loaded 
 
 | File | Coverage |
 |------|----------|
-| `tests/routes/labels.test.ts` | `GET /api/labels` list + empty + count field; `POST` create + 400 name too long + 400 bad hex color + 409 duplicate name; `PATCH` rename + recolor + 404 cross-user; `DELETE` deletes + cascades `email_labels`; ownership guards throughout |
-| `tests/routes/snooze.test.ts` | `PATCH /api/emails/:id/snooze` sets `snoozed_until`; rejects past timestamp (400); rejects >1yr (400); 404 cross-user. `DELETE` clears field. `GET /api/emails` default excludes snoozed; `?snoozed=1` shows only snoozed; snoozed email excluded from folder view |
-| `tests/routes/email-labels.test.ts` | `POST /api/emails/:id/labels/:labelId` assigns label + idempotent (201 both times); `DELETE` removes label; label appears in `GET /api/emails` response `labels` array; label appears in `GET /api/emails/:id`; cross-user guard on both email and label |
+| `tests/routes/labels.test.ts` | `GET /api/labels` list + empty + `count` field; `POST` create + 400 name too long + 400 bad hex color + 409 duplicate name; `PATCH` rename + recolor + 404 cross-user; `DELETE` deletes + cascades `email_labels`; ownership guards throughout |
+| `tests/routes/snooze.test.ts` | `PATCH /api/emails/:id/snooze` sets `snoozed_until`; rejects past timestamp (400); rejects >1yr (400); 404 cross-user. `DELETE` clears `snoozed_until`. `GET /api/emails` default excludes snoozed; `?snoozed=1` shows only snoozed; snoozed email excluded from normal folder view. `POST /api/emails/unsnooze-due` restores emails with `snoozed_until <= now()` and leaves future-snoozed emails untouched |
+| `tests/routes/email-labels.test.ts` | `POST /api/emails/:id/labels/:labelId` assigns label; idempotent — second call returns 200 with no error; `DELETE` removes label; label appears in `GET /api/emails` `labels` array; label appears in `GET /api/emails/:id`; cross-user guard on both email (404) and label (404); `?labelId=<other-user-label>` returns 404 |
 
 ### Additions to existing test files
 
 | File | Additions |
 |------|-----------|
-| `tests/routes/emails.test.ts` | `?labelId=` filter returns only emails with that label; `labels: []` present in list response; label data in single email response |
-| `tests/email/sync-engine.test.ts` | Scheduler un-snooze: email with `snoozed_until` in the past gets `snoozed_until = NULL` and remains in original folder after tick |
+| `tests/routes/emails.test.ts` | `?labelId=` filter returns only emails with that label; `labels: []` present in list response for unlabelled email; label data correct in single email response; multi-label email appears exactly once in list (not duplicated) |
 
 ### Estimated totals
 
