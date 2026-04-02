@@ -77,6 +77,27 @@ const MIGRATIONS: string[] = [
   `ALTER TABLE accounts ADD COLUMN token_expired INTEGER NOT NULL DEFAULT 0;`,
   // Migration 6: Gmail History API ID for incremental sync
   `ALTER TABLE accounts ADD COLUMN gmail_history_id TEXT;`,
+  // Migration 7: snooze, labels, email-label junction
+  `
+  ALTER TABLE emails ADD COLUMN snoozed_until INTEGER;
+  CREATE INDEX IF NOT EXISTS idx_emails_snoozed ON emails(snoozed_until)
+    WHERE snoozed_until IS NOT NULL;
+  CREATE TABLE IF NOT EXISTS labels (
+    id         TEXT PRIMARY KEY,
+    user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name       TEXT NOT NULL,
+    color      TEXT NOT NULL DEFAULT '#6B7280',
+    created_at INTEGER NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_labels_user_name ON labels(user_id, name);
+  CREATE INDEX IF NOT EXISTS idx_labels_user ON labels(user_id);
+  CREATE TABLE IF NOT EXISTS email_labels (
+    email_id  TEXT NOT NULL REFERENCES emails(id) ON DELETE CASCADE,
+    label_id  TEXT NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
+    PRIMARY KEY (email_id, label_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_email_labels_label ON email_labels(label_id);
+  `,
 ]
 
 export function runMigrations(db: Database.Database): void {
