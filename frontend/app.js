@@ -174,6 +174,47 @@ let emailOffset = 0;
 let emailLoading = false;
 let emailHasMore = true;
 
+let userLabels = []     // [{ id, name, color, count }]
+let currentLabelId = null  // active label filter
+
+async function loadLabels() {
+  try {
+    userLabels = await apiFetch('/api/labels')
+    renderLabelsSidebar()
+  } catch { /* silent */ }
+}
+
+function renderLabelsSidebar() {
+  const wrap = document.getElementById('sb-labels-section')
+  if (!wrap) return
+  if (userLabels.length === 0) { wrap.style.display = 'none'; return }
+  wrap.style.display = ''
+  const list = document.getElementById('sb-labels-list')
+  if (!list) return
+  list.innerHTML = userLabels.map(l => `
+    <div class="sb-item sb-label-item${currentLabelId === l.id ? ' active' : ''}"
+         onclick="setLabelFolder('${l.id}', this)"
+         data-label-id="${l.id}">
+      <span class="sb-label-dot" style="background:${escHtml(l.color)}"></span>
+      <span class="sb-label-name">${escHtml(l.name)}</span>
+      ${l.count > 0 ? `<span class="sb-badge">${l.count}</span>` : ''}
+    </div>
+  `).join('')
+}
+
+function setLabelFolder(labelId, el) {
+  currentLabelId = labelId
+  currentFolder = 'label'
+  currentFilter = 'all'
+  currentDateFrom = null
+  currentDateTo = null
+  document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('active'))
+  if (el) el.classList.add('active')
+  const label = userLabels.find(l => l.id === labelId)
+  document.getElementById('folder-title').textContent = label ? label.name : 'Label'
+  loadEmails(true)
+}
+
 // Maps sidebar folder names to API query params.
 // 'inbox'   → folder=inbox (backend auto-excludes promotions)
 // 'allmail' → no params = every email, no filter
@@ -189,10 +230,16 @@ const FOLDER_PARAMS = {
   sent:       { folder: 'sent' },
   draft:      { folder: 'draft' },
   spam:       { folder: 'spam' },
+  focused:    { folder: 'inbox', tab: 'primary' },
+  snoozed:    { snoozed: '1' },
 };
 
 function buildEmailParams(offset = 0) {
-  const folderParams = FOLDER_PARAMS[currentFolder] || { folder: 'inbox' };
+  let folderParams = FOLDER_PARAMS[currentFolder] || { folder: 'inbox' };
+  // Label folder is a special case — use labelId param instead of folderParams
+  if (currentFolder === 'label' && currentLabelId) {
+    folderParams = { labelId: currentLabelId }
+  }
   const params = {
     ...folderParams,
     search: currentSearch || undefined,
@@ -313,6 +360,16 @@ function renderEmailRow(email) {
       ${isUnread ? '<div class="er-unread-dot"></div>' : ''}
     </div>`;
   row.onclick = () => selectEmail(email.id);
+  row.addEventListener('contextmenu', (e) => {
+    openCtxMenu(e, email.id, {
+      id: email.id,
+      is_read: email.is_read,
+      sender: email.sender,
+      sender_name: email.sender_name,
+      folder: email.folder,
+      labels: email.labels || [],
+    })
+  })
   // Try to replace letter avatar with sender logo
   const domain = extractSenderDomain(email.sender);
   if (domain) tryLoadLogo(row.querySelector('.er-avatar'), domain);
@@ -373,6 +430,7 @@ function setFolder(f, el) {
     inbox: 'Inbox', allmail: 'All Mail', bills: 'Bills', govt: 'Government',
     receipts: 'Receipts', work: 'Work', important: 'Important',
     promotions: 'Promotions', sent: 'Sent', draft: 'Drafts', spam: 'Spam',
+    focused: 'Focused', snoozed: 'Snoozed',
   };
   document.getElementById('folder-title').textContent = titles[f] || f;
   document.querySelectorAll('.el-filter').forEach(i => i.classList.remove('active'));
@@ -1387,6 +1445,33 @@ if (window.inboxmy) {
 }
 
 // ── BACKGROUND SYNC POLL ─────────────────────────────────────────────────────
+async function refreshFocusedBadge() {
+  try {
+    const data = await apiFetch('/api/emails?folder=inbox&tab=primary&unread=1&limit=1')
+    const el = document.getElementById('badge-focused')
+    if (el) el.textContent = data.total > 0 ? (data.total > 99 ? '99+' : data.total) : ''
+  } catch { /* silent */ }
+}
+
+async function refreshSnoozedBadge() {
+  try {
+    const data = await apiFetch('/api/emails?snoozed=1&limit=1')
+    const el = document.getElementById('badge-snoozed')
+    if (el) el.textContent = data.total > 0 ? (data.total > 99 ? '99+' : data.total) : ''
+  } catch { /* silent */ }
+}
+
+async function promptNewLabel() {
+  const name = prompt('Label name:')
+  if (!name || !name.trim()) return
+  try {
+    await apiFetch('/api/labels', { method: 'POST', body: JSON.stringify({ name: name.trim() }) })
+    await loadLabels()
+  } catch (e) {
+    showToast('Could not create label: ' + (e?.message || 'Unknown error'))
+  }
+}
+
 // Silently syncs every 60 seconds and refreshes the email list if new emails
 // were added. Uses Gmail History API on the backend so it's cheap (1 API call
 // per poll when nothing is new).
@@ -1412,6 +1497,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadCategoryBadges(),
     refreshUnreadCount(),
   ]);
+  loadLabels()
+  refreshFocusedBadge()
+  refreshSnoozedBadge()
 
   // Request notification permission early so it's ready when emails arrive
   if (Notification.permission === 'default') Notification.requestPermission()
@@ -1419,3 +1507,214 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Start background poll — 60 s interval for near-real-time inbox updates
   setInterval(backgroundSyncPoll, 60_000);
 });
+
+// ── CONTEXT MENU ─────────────────────────────────────────────────────────────
+let ctxEmailId = null
+let ctxEmailData = null  // { id, is_read, sender, sender_name, folder, labels }
+
+function closeCtxMenu() {
+  const menu = document.getElementById('ctx-menu')
+  if (menu) menu.style.display = 'none'
+  ctxEmailId = null
+  ctxEmailData = null
+}
+
+document.addEventListener('click', (e) => {
+  if (!document.getElementById('ctx-menu')?.contains(e.target)) closeCtxMenu()
+})
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeCtxMenu()
+})
+document.getElementById('el-items')?.addEventListener('scroll', closeCtxMenu)
+
+function openCtxMenu(e, emailId, emailData) {
+  e.preventDefault()
+  ctxEmailId = emailId
+  ctxEmailData = emailData
+
+  // Toggle read label
+  const toggleEl = document.getElementById('ctx-toggle-read')
+  if (toggleEl) toggleEl.textContent = emailData.is_read ? '✉ Mark as unread' : '✉ Mark as read'
+
+  // Find from sender
+  const senderEl = document.getElementById('ctx-find-sender')
+  if (senderEl) senderEl.textContent = `🔍 Find emails from ${emailData.sender_name || emailData.sender}`
+
+  // Populate label submenu
+  renderCtxLabelList()
+
+  const menu = document.getElementById('ctx-menu')
+  menu.style.display = 'block'
+
+  // Position — keep within viewport
+  const menuW = 220, menuH = 340
+  let x = e.clientX, y = e.clientY
+  if (x + menuW > window.innerWidth)  x = window.innerWidth - menuW - 8
+  if (y + menuH > window.innerHeight) y = window.innerHeight - menuH - 8
+  menu.style.left = x + 'px'
+  menu.style.top  = y + 'px'
+}
+
+function renderCtxLabelList() {
+  const list = document.getElementById('ctx-labels-list')
+  if (!list || !ctxEmailData) return
+  const emailLabels = ctxEmailData.labels || []
+  const assignedIds = new Set(emailLabels.map(l => l.id))
+  list.innerHTML = userLabels.map(l => `
+    <div class="ctx-item" onclick="ctxToggleLabel('${l.id}')">
+      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${escHtml(l.color)};margin-right:8px"></span>
+      ${escHtml(l.name)}
+      ${assignedIds.has(l.id) ? ' ✓' : ''}
+    </div>
+  `).join('')
+}
+
+async function ctxAction(action) {
+  if (!ctxEmailId) return
+  const id = ctxEmailId
+  const data = ctxEmailData
+  closeCtxMenu()
+
+  if (action === 'reply' || action === 'reply-all' || action === 'forward') {
+    if (typeof openCompose === 'function') {
+      openCompose({ mode: action, emailId: id })
+    } else {
+      showToast('Compose coming soon')
+    }
+    return
+  }
+
+  if (action === 'archive') {
+    await apiFetch(`/api/emails/${id}/folder`, { method: 'PATCH', body: JSON.stringify({ folder: 'archive' }) })
+    removeEmailFromList(id)
+    return
+  }
+
+  if (action === 'delete') {
+    await apiFetch(`/api/emails/${id}/folder`, { method: 'PATCH', body: JSON.stringify({ folder: 'trash' }) })
+    removeEmailFromList(id)
+    return
+  }
+
+  if (action === 'toggle-read') {
+    const newRead = !data.is_read
+    await apiFetch(`/api/emails/${id}/read`, { method: 'PATCH', body: JSON.stringify({ read: newRead }) })
+    const row = document.getElementById('row-' + id)
+    if (row) row.classList.toggle('unread', !newRead)
+    const cached = emailCache.find(e => e.id === id)
+    if (cached) cached.is_read = newRead
+    return
+  }
+
+  if (action === 'find-sender') {
+    const searchInput = document.getElementById('search-input')
+    if (searchInput) {
+      searchInput.value = data.sender
+      filterEmails(data.sender)
+    }
+    return
+  }
+}
+
+function removeEmailFromList(id) {
+  const row = document.getElementById('row-' + id)
+  if (row) row.remove()
+  emailCache = emailCache.filter(e => e.id !== id)
+  const countEl = document.getElementById('email-count')
+  if (countEl) countEl.textContent = emailCache.length + (emailHasMore ? '+' : '') + ' email' + (emailCache.length !== 1 ? 's' : '')
+}
+
+async function ctxMoveTo(folder) {
+  if (!ctxEmailId) return
+  const id = ctxEmailId
+  closeCtxMenu()
+  await apiFetch(`/api/emails/${id}/folder`, { method: 'PATCH', body: JSON.stringify({ folder }) })
+  removeEmailFromList(id)
+}
+
+async function ctxToggleLabel(labelId) {
+  if (!ctxEmailId || !ctxEmailData) return
+  const id = ctxEmailId
+  const assignedIds = new Set((ctxEmailData.labels || []).map(l => l.id))
+  if (assignedIds.has(labelId)) {
+    await apiFetch(`/api/emails/${id}/labels/${labelId}`, { method: 'DELETE' })
+    ctxEmailData.labels = (ctxEmailData.labels || []).filter(l => l.id !== labelId)
+  } else {
+    await apiFetch(`/api/emails/${id}/labels/${labelId}`, { method: 'POST' })
+    const label = userLabels.find(l => l.id === labelId)
+    if (label) ctxEmailData.labels = [...(ctxEmailData.labels || []), label]
+  }
+  renderCtxLabelList()
+  await loadLabels()  // refresh sidebar counts
+}
+
+function ctxNewLabel() {
+  const wrap = document.getElementById('ctx-new-label-wrap')
+  if (wrap) { wrap.style.display = ''; document.getElementById('ctx-new-label-input')?.focus() }
+}
+
+async function ctxCreateAndAssignLabel() {
+  const input = document.getElementById('ctx-new-label-input')
+  const name = input?.value?.trim()
+  if (!name) return
+  try {
+    const label = await apiFetch('/api/labels', { method: 'POST', body: JSON.stringify({ name }) })
+    await apiFetch(`/api/emails/${ctxEmailId}/labels/${label.id}`, { method: 'POST' })
+    if (input) input.value = ''
+    const wrap = document.getElementById('ctx-new-label-wrap')
+    if (wrap) wrap.style.display = 'none'
+    await loadLabels()
+  } catch (e) {
+    showToast('Could not create label: ' + (e?.message || 'error'))
+  }
+}
+
+function ctxSnoozePreset(preset) {
+  if (!ctxEmailId) return
+  const now = new Date()
+  let until
+
+  if (preset === 'later-today') {
+    until = Date.now() + 3 * 60 * 60 * 1000
+  } else if (preset === 'tomorrow') {
+    const d = new Date(now); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0)
+    until = d.getTime()
+  } else if (preset === 'weekend') {
+    const d = new Date(now)
+    const daysToSat = (6 - d.getDay() + 7) % 7 || 7
+    d.setDate(d.getDate() + daysToSat); d.setHours(9, 0, 0, 0)
+    until = d.getTime()
+  } else if (preset === 'next-week') {
+    const d = new Date(now)
+    const daysToMon = (1 - d.getDay() + 7) % 7 || 7
+    d.setDate(d.getDate() + daysToMon); d.setHours(9, 0, 0, 0)
+    until = d.getTime()
+  }
+
+  const id = ctxEmailId
+  closeCtxMenu()
+  apiFetch(`/api/emails/${id}/snooze`, { method: 'PATCH', body: JSON.stringify({ until }) })
+    .then(() => { removeEmailFromList(id); refreshSnoozedBadge() })
+    .catch(e => showToast('Snooze failed: ' + e.message))
+}
+
+function ctxSnoozeCustom() {
+  const wrap = document.getElementById('ctx-snooze-custom-wrap')
+  if (wrap) { wrap.style.display = ''; document.getElementById('ctx-snooze-datetime')?.focus() }
+}
+
+async function ctxSnoozeApplyCustom() {
+  const input = document.getElementById('ctx-snooze-datetime')
+  if (!input || !input.value) return
+  const until = new Date(input.value).getTime()
+  if (isNaN(until) || until <= Date.now()) { showToast('Please pick a future date/time'); return }
+  const id = ctxEmailId
+  closeCtxMenu()
+  try {
+    await apiFetch(`/api/emails/${id}/snooze`, { method: 'PATCH', body: JSON.stringify({ until }) })
+    removeEmailFromList(id)
+    refreshSnoozedBadge()
+  } catch (e) {
+    showToast('Snooze failed: ' + e.message)
+  }
+}
