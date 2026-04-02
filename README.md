@@ -85,7 +85,8 @@ Produces a Windows installer (`dist/InboxMY Setup x.x.x.exe`) using `electron-bu
 | Email fetch | `src/email/gmail-client.ts`, `outlook-client.ts` | Gmail API + Microsoft Graph, normalised to shared type |
 | Parsers | `src/parsers/` (11 files) | TNB, Unifi, Celcom/Maxis/Digi, Touch 'n Go, LHDN, MySejahtera, Shopee, Lazada + generic RM extractor |
 | Sync engine | `src/email/sync-engine.ts` | Multi-account sync, runs parsers, writes emails + bills atomically |
-| REST API | `src/routes/` (5 files) | `/api/accounts`, `/api/emails`, `/api/bills`, `/api/sync`, `/api/notifications` |
+| Email send | `src/email/send.ts` | `sendEmail()` abstraction — Gmail (MIME base64url via googleapis) + Outlook (Graph API JSON) |
+| REST API | `src/routes/` (8 files) | `/api/accounts`, `/api/emails`, `/api/emails/send`, `/api/emails/unsnooze-due`, `/api/bills`, `/api/sync`, `/api/notifications`, `/api/labels` |
 | Server | `src/server.ts` | Express, bound to `127.0.0.1` only, rate-limited, serves frontend statically |
 | AI notifier | `src/ai/notifier.ts` | Gemini 2.0 Flash — smart bill summaries with plaintext fallback |
 | Electron main | `electron/main.js` | BrowserWindow, system tray, toast notifications, IPC, auto-launch, backend spawner |
@@ -98,7 +99,14 @@ Produces a Windows installer (`dist/InboxMY Setup x.x.x.exe`) using `electron-bu
 
 ## Running the Tests
 
-### Backend tests (139 tests)
+### Run everything (282 tests)
+
+```powershell
+# From repo root — runs Electron utils + backend in sequence
+npm run test:all
+```
+
+### Backend tests (278 tests)
 
 ```powershell
 cd inboxmy-backend
@@ -114,9 +122,9 @@ npm test
 npm run test:utils
 ```
 
-### Combined: 143 tests total
+### Combined: 282 tests total
 
-Test coverage includes: encryption, bill parsers, API routes, auth middleware, sync engine, AI notifier, notification scheduler utils.
+Test coverage includes: encryption, all bill parsers (TNB, Unifi, Maxis, TnG, LHDN, Shopee, Lazada, MySejahtera, generic, spam-scorer), all API routes (accounts, emails with all filters + snooze + label filters, bills, sync, notifications, send, labels CRUD, email-label assignment), auth middleware + session cookie attributes, sync engine (token-expired flag, dedup, concurrent sync, multi-account), AI notifier, notification scheduler utils, sendEmail abstraction (Gmail + Outlook), Electron notification key utils.
 
 ---
 
@@ -290,6 +298,80 @@ Manual test checklist for Plan 7 (requires running app):
 
 ---
 
+### Plan 8 — Test Coverage (High Priority Routes)
+
+| Test file | What it tests |
+|---|---|
+| `tests/routes/emails.test.ts` | `GET /api/emails` basic list + pagination shape, `GET /api/emails/:id` single email + 404 + cross-user guard, `PATCH /api/emails/:id/read` mark-read idempotency + cross-user safety, `DELETE /api/emails` wipe + `last_synced` reset |
+| `tests/routes/bills.test.ts` | `GET /api/bills` list + status filter + sort order + field shape + cross-user isolation, `PATCH /api/bills/:id/status` paid/unpaid/overdue transitions + 400/404 guards |
+
+To run just Plan 8 tests:
+```powershell
+$env:ENCRYPTION_KEY="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+$env:DATA_DIR="./data-test"
+npx vitest run tests/routes/bills.test.ts tests/routes/emails.test.ts
+```
+
+---
+
+### Plan 9 — Test Coverage (Medium Priority + Bug Fixes)
+
+| Test file | What it tests |
+|---|---|
+| `tests/parsers/mysejahtera.test.ts` | MySejahtera sender/subject matching + `govt` category classification |
+| `tests/parsers/spam-scorer.test.ts` | Trigger phrases, structural signals (caps, punctuation, $$$), link density, sender mismatch, non-inbox skip |
+| `tests/routes/emails.test.ts` | `folder` filter (inbox/spam/sent + invalid 400), `tab` filter (promotions/primary + invalid 400), `unread=1`/`unread=true` filter |
+| `tests/routes/auth.test.ts` | Session cookie is HttpOnly + SameSite=Lax on signup and login; rate-limit skip documented |
+| `tests/routes/accounts.test.ts` | 6-account cap on `connect/gmail` + `connect/outlook` (400 when at limit, 302 redirect when under) |
+| `tests/email/sync-engine.test.ts` | Concurrent `syncAccount` calls for same account insert each email exactly once |
+
+**Production bugs found and fixed by Plan 9:**
+- `EMAIL_SELECT` in `emails.ts` was missing `folder`, `tab`, `is_important` — email list responses were incomplete
+- 6-account cap was documented but not enforced in `accounts.ts` — now enforced in `connect/gmail` and `connect/outlook`
+
+To run just Plan 9 tests:
+```powershell
+$env:ENCRYPTION_KEY="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+$env:DATA_DIR="./data-test"
+npx vitest run tests/parsers/mysejahtera.test.ts tests/parsers/spam-scorer.test.ts tests/routes/accounts.test.ts tests/routes/auth.test.ts tests/email/sync-engine.test.ts
+```
+
+---
+
+### Plan 10 — Compose + Move/Archive (Backend)
+
+| Test file | What it tests |
+|---|---|
+| `tests/email/send.test.ts` | `sendEmail()` — Gmail MIME construction (base64url RFC 2822 payload), Outlook Graph API JSON body, auth error propagation, Graph API non-ok response handling |
+| `tests/routes/send.test.ts` | `POST /api/emails/send` — happy path saves encrypted sent copy; auto-picks accountId from replyToEmailId; 400 for missing accountId/invalid email/body > 50 KB; 404 for cross-user account/email; 502 on send failure (no DB row saved); 401 + reconnect:true on re-auth error |
+| `tests/routes/emails.test.ts` | `PATCH /api/emails/:id/folder` — moves to valid folder, 400 for invalid folder, 404 cross-user guard, 401 no-auth; `GET /api/emails?folder=archive` — lists archived emails |
+
+To run just Plan 10 tests:
+```powershell
+$env:ENCRYPTION_KEY="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+$env:DATA_DIR="./data-test"
+npx vitest run tests/email/send.test.ts tests/routes/send.test.ts tests/routes/emails.test.ts
+```
+
+---
+
+### Plan 11 — Snooze + Focused Inbox + Smart Groups (Labels)
+
+| Test file | What it tests |
+|---|---|
+| `tests/routes/labels.test.ts` | `GET /api/labels` list + empty + `count` field; `POST` create + 400 name too long + 400 bad hex + 409 duplicate; `PATCH` rename + recolor + 404 cross-user; `DELETE` deletes + cascades `email_labels`; ownership guards throughout |
+| `tests/routes/snooze.test.ts` | `PATCH /api/emails/:id/snooze` — sets snooze, 400 past timestamp, 400 >1 year, 404 cross-user, 401 no-auth; `DELETE` clears snooze (idempotent 200 when not snoozed); `GET /api/emails` default excludes snoozed, `?snoozed=1` shows only snoozed, folder view excludes snoozed; `POST /api/emails/unsnooze-due` restores past-due, leaves future-snoozed untouched; `GET /api/emails/unread-count` excludes snoozed emails |
+| `tests/routes/email-labels.test.ts` | `POST /api/emails/:id/labels/:labelId` assigns label (idempotent), 404 cross-user email, 404 cross-user label, 401; `DELETE` removes label, 404 cross-user label; `labels` array in list + single email response; unlabelled email has `labels: []`; multi-label email appears exactly once; `?labelId=` filter + 404 cross-user labelId |
+
+To run just Plan 11 tests:
+```powershell
+$env:ENCRYPTION_KEY="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+$env:DATA_DIR="./data-test"
+npx vitest run tests/routes/labels.test.ts tests/routes/snooze.test.ts tests/routes/email-labels.test.ts
+```
+
+---
+
 To run a single test file:
 ```powershell
 $env:ENCRYPTION_KEY="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -318,6 +400,12 @@ All implementation plans live in `docs/superpowers/plans/`.
 | 4 | Multi-User Architecture | ✅ Done |
 | 5 | Account Management UI | ✅ Done |
 | 6 | Notifications + Overdue Detection (Electron) | ✅ Done |
+| 7 | Search + Filtering Improvements | ✅ Done |
+| 8 | Test Coverage — High Priority Routes | ✅ Done |
+| 9 | Test Coverage — Medium Priority + Bug Fixes | ✅ Done |
+| 10 | Compose + Move/Archive | ✅ Done (backend) |
+| 11 | Snooze + Focused Inbox + Smart Groups | ✅ Done |
+| 12 | Calendar Integration | ⏳ Pending |
 
 ---
 
@@ -332,8 +420,11 @@ All implementation plans live in `docs/superpowers/plans/`.
 | 5 | **Account Management UI** | Rename accounts, delete + revoke, re-auth expired tokens, per-account sync status | ✅ Done |
 | 6 | **Notifications + Overdue Detection (Electron)** | Electron desktop app (NSIS installer), system tray, Windows toast notifications, overdue bill banner, deep-link navigation, AI summaries via Gemini 2.0 Flash, Gemini key storage via DPAPI, auto-launch toggle | ✅ Done |
 | 7 | **Search + Filtering Improvements** | Full-text in-memory search (sender/subject/snippet), date range filters (presets + custom picker), multi-account filter pills (OR logic) | ✅ Done |
-| 8 | **Hardening + v1.0 Polish** | Rate limiting review, error boundary UI, accessibility pass, performance profiling, v1.0 release | ⏳ Pending |
-| 9 | **Hosted Deployment** | Docker setup, cloud hosting config, privacy-preserving multi-tenant model | ⏳ Pending |
+| 8 | **Test Coverage — High Priority Routes** | Full test suite runner (`npm run test:all`), `GET /api/bills`, `PATCH /api/bills/:id/status`, `GET /api/emails` basic list + pagination, `GET /api/emails/:id`, `PATCH /api/emails/:id/read`, `DELETE /api/emails` — 181 tests total, all passing | ✅ Done |
+| 9 | **Test Coverage — Medium Priority + Bug Fixes** | MySejahtera + spam-scorer parser tests, email folder/tab/unread filter tests, session cookie attribute tests, 6-account cap enforcement (backend + tests), concurrent sync dedup test — 219 tests total; 2 production bugs found and fixed | ✅ Done |
+| 10 | **Compose + Move/Archive** | `sendEmail()` abstraction (Gmail MIME + Outlook Graph), `POST /api/emails/send` (validate, ownership check, save encrypted sent copy, re-auth 401), `PATCH /api/emails/:id/folder` (inbox/sent/spam/draft/trash/archive), OAuth send scopes added — 239 tests total, backend complete; frontend compose UI pending | ✅ Done (backend) |
+| 11 | **Snooze + Focused Inbox + Smart Groups** | Snooze emails (`PATCH /api/emails/:id/snooze`, `DELETE /api/emails/:id/snooze`) with auto-restore via `POST /api/emails/unsnooze-due` (Electron tick every 60s); Focused inbox view (`folder=inbox&tab=primary`); user-created labels (`/api/labels` CRUD) with many-to-many email assignment; Gmail-style right-click context menu (snooze presets, move-to, label-as submenus); Focused + Snoozed + Labels sidebar entries — 282 tests total | ✅ Done |
+| 12 | **Calendar Integration** | New calendar data domain, Google Calendar + Outlook Calendar via existing OAuth, separate calendar panel in dashboard | ⏳ Pending |
 
 ---
 
@@ -385,6 +476,8 @@ All endpoints are available at `http://localhost:3001` while the app is running.
 | GET | `/api/emails` | List emails — params: `?category=bill\|govt\|receipt\|work`, `?accountId=`, `?accountIds=id1,id2`, `?search=`, `?dateFrom=YYYY-MM-DD`, `?dateTo=YYYY-MM-DD`, `?unread=1`, `?limit=50`, `?offset=0` |
 | GET | `/api/emails/:id` | Get a single email with decrypted body + parsed bill fields |
 | PATCH | `/api/emails/:id/read` | Mark an email as read |
+| PATCH | `/api/emails/:id/folder` | Move email to a folder — body: `{"folder":"inbox\|sent\|spam\|draft\|trash\|archive"}` |
+| POST | `/api/emails/send` | Send an email — body: `{"to":"","subject":"","body":"","accountId":""}` (or use `replyToEmailId` instead of `accountId`) |
 | GET | `/api/bills` | List parsed bills — params: `?status=unpaid\|paid\|overdue` |
 | PATCH | `/api/bills/:id/status` | Update bill status — body: `{"status":"paid"}` |
 | PATCH | `/api/bills/auto-mark-overdue` | Mark all past-due unpaid bills as overdue |
@@ -655,9 +748,22 @@ Completed so far:
   persists across folder switches). GET /api/emails extended with dateFrom/dateTo/accountIds/search
   params — fast SQL path when no search, in-memory decrypt+filter path when search present. 17 new
   tests. 143 tests total passing (139 backend + 4 utils).
+- Plan 8 (Test Coverage — High Priority Routes): Full test suite runner (npm run test:all),
+  GET /api/bills, PATCH /api/bills/:id/status, GET /api/emails basic list + pagination,
+  GET /api/emails/:id, PATCH /api/emails/:id/read, DELETE /api/emails. 181 tests total.
+- Plan 9 (Test Coverage — Medium Priority + Bug Fixes): MySejahtera + spam-scorer parser tests,
+  folder/tab/unread filter tests, session cookie attribute tests, 6-account cap enforcement (backend +
+  tests), concurrent sync dedup test. 219 tests total. 2 production bugs found and fixed.
+- Plan 10 (Compose + Move/Archive — backend complete): sendEmail() abstraction in src/email/send.ts
+  (Gmail MIME base64url via googleapis, Outlook via Graph API fetch), POST /api/emails/send route
+  (validates to/subject/body/accountId, resolves accountId from replyToEmailId, ownership check,
+  saves encrypted sent copy with user dataKey, 502 on failure / 401+reconnect on re-auth),
+  PATCH /api/emails/:id/folder (inbox/sent/spam/draft/trash/archive), OAuth send scopes added to
+  Gmail and Outlook. 235 backend tests (239 total). Frontend compose UI (Tasks 8-10) is pending.
 
-Today's goal is Plan 8: Hardening + v1.0 Polish.
-Rate limiting review, error boundary UI, accessibility pass, performance profiling, v1.0 release.
+Next goal: complete Plan 10 frontend tasks (Tasks 8-10) — wire compose modal in frontend/app.js
+and frontend/index.html (openCompose, closeCompose, sendEmail, moveEmail, account picker, Forward
+button, Archive sidebar entry), then move to Plan 11 (Snooze + Focused Inbox + Smart Groups).
 ```
 
 
