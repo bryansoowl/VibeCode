@@ -22,11 +22,15 @@ const listQuery = z.object({
   dateFrom:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   dateTo:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   snoozed:    z.enum(['1', 'true']).optional(),
+  labelId:    z.string().uuid().optional(),
 })
 
 const EMAIL_SELECT = `SELECT e.id, e.account_id, e.thread_id, e.subject_enc,
   e.sender, e.sender_name, e.received_at, e.is_read, e.folder, e.tab,
-  e.is_important, e.category, e.snippet, e.raw_size
+  e.is_important, e.category, e.snippet, e.raw_size,
+  (SELECT json_group_array(json_object('id', l.id, 'name', l.name, 'color', l.color))
+   FROM email_labels el JOIN labels l ON l.id = el.label_id
+   WHERE el.email_id = e.id) AS labels_json
   FROM emails e
   JOIN accounts a ON a.id = e.account_id`
 
@@ -34,7 +38,7 @@ emailsRouter.get('/', (req: Request, res: Response) => {
   const parsed = listQuery.safeParse(req.query)
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
 
-  const { category, folder, tab, important, accountId, accountIds, limit, offset, search, unread, dateFrom, dateTo, snoozed } = parsed.data
+  const { category, folder, tab, important, accountId, accountIds, limit, offset, search, unread, dateFrom, dateTo, snoozed, labelId } = parsed.data
   const user = (req as any).user
   const db = getDb()
 
@@ -65,6 +69,12 @@ emailsRouter.get('/', (req: Request, res: Response) => {
     conditions.push(`e.account_id IN (${idList.map(() => '?').join(',')})`)
     params.push(...idList)
   }
+  if (labelId) {
+    const label = db.prepare('SELECT id FROM labels WHERE id = ? AND user_id = ?').get(labelId, user.id)
+    if (!label) return res.status(404).json({ error: 'Label not found' })
+    conditions.push(`e.id IN (SELECT email_id FROM email_labels WHERE label_id = ?)`)
+    params.push(labelId)
+  }
   if (unread)              { conditions.push('e.is_read = 0') }
   if (dateFromMs !== null) { conditions.push('e.received_at >= ?'); params.push(dateFromMs) }
   if (dateToMs !== null)   { conditions.push('e.received_at <= ?'); params.push(dateToMs) }
@@ -88,6 +98,8 @@ emailsRouter.get('/', (req: Request, res: Response) => {
         subject: decrypt(r.subject_enc, user.dataKey),
         snippet: r.snippet ? decrypt(r.snippet, user.dataKey) : null,
         subject_enc: undefined,
+        labels: r.labels_json ? JSON.parse(r.labels_json) : [],
+        labels_json: undefined,
       }))
       return res.json({ emails, limit, offset, total })
     }
@@ -106,7 +118,12 @@ emailsRouter.get('/', (req: Request, res: Response) => {
           subject.toLowerCase().includes(q) ||
           (snippet ?? '').toLowerCase().includes(q)
         ) {
-          filtered.push({ ...r, subject, snippet, subject_enc: undefined })
+          filtered.push({
+            ...r, subject, snippet,
+            subject_enc: undefined,
+            labels: r.labels_json ? JSON.parse(r.labels_json) : [],
+            labels_json: undefined,
+          })
         }
       } catch {
         // Skip rows that fail decryption rather than aborting the whole response
@@ -136,7 +153,11 @@ emailsRouter.get('/:id', (req: Request, res: Response) => {
   const user = (req as any).user
   const db = getDb()
   const row = db.prepare(`
-    SELECT e.*, pb.biller, pb.amount_rm, pb.due_date, pb.account_ref, pb.status
+    SELECT e.*,
+      pb.biller, pb.amount_rm, pb.due_date, pb.account_ref, pb.status,
+      (SELECT json_group_array(json_object('id', l.id, 'name', l.name, 'color', l.color))
+       FROM email_labels el JOIN labels l ON l.id = el.label_id
+       WHERE el.email_id = e.id) AS labels_json
     FROM emails e
     JOIN accounts a ON a.id = e.account_id
     LEFT JOIN parsed_bills pb ON pb.email_id = e.id
@@ -153,6 +174,8 @@ emailsRouter.get('/:id', (req: Request, res: Response) => {
       snippet: row.snippet ? decrypt(row.snippet, user.dataKey) : null,
       subject_enc: undefined,
       body_enc: undefined,
+      labels: row.labels_json ? JSON.parse(row.labels_json) : [],
+      labels_json: undefined,
     })
   } catch {
     res.status(500).json({ error: 'Failed to decrypt email data' })
@@ -236,5 +259,41 @@ emailsRouter.delete('/:id/snooze', (req: Request, res: Response) => {
   `).get(req.params.id, user.id)
   if (!email) return res.status(404).json({ error: 'Email not found' })
   db.prepare('UPDATE emails SET snoozed_until = NULL WHERE id = ?').run(req.params.id)
+  res.json({ ok: true })
+})
+
+// POST /api/emails/:id/labels/:labelId — assign label (INSERT OR IGNORE — idempotent)
+emailsRouter.post('/:id/labels/:labelId', (req: Request, res: Response) => {
+  const user = (req as any).user
+  const db = getDb()
+
+  const email = db.prepare(`
+    SELECT e.id FROM emails e JOIN accounts a ON a.id = e.account_id
+    WHERE e.id = ? AND a.user_id = ?
+  `).get(req.params.id, user.id)
+  if (!email) return res.status(404).json({ error: 'Email not found' })
+
+  const label = db.prepare('SELECT id FROM labels WHERE id = ? AND user_id = ?').get(req.params.labelId, user.id)
+  if (!label) return res.status(404).json({ error: 'Label not found' })
+
+  db.prepare('INSERT OR IGNORE INTO email_labels (email_id, label_id) VALUES (?, ?)').run(req.params.id, req.params.labelId)
+  res.json({ ok: true })
+})
+
+// DELETE /api/emails/:id/labels/:labelId — remove label assignment
+emailsRouter.delete('/:id/labels/:labelId', (req: Request, res: Response) => {
+  const user = (req as any).user
+  const db = getDb()
+
+  const email = db.prepare(`
+    SELECT e.id FROM emails e JOIN accounts a ON a.id = e.account_id
+    WHERE e.id = ? AND a.user_id = ?
+  `).get(req.params.id, user.id)
+  if (!email) return res.status(404).json({ error: 'Email not found' })
+
+  const label = db.prepare('SELECT id FROM labels WHERE id = ? AND user_id = ?').get(req.params.labelId, user.id)
+  if (!label) return res.status(404).json({ error: 'Label not found' })
+
+  db.prepare('DELETE FROM email_labels WHERE email_id = ? AND label_id = ?').run(req.params.id, req.params.labelId)
   res.json({ ok: true })
 })
