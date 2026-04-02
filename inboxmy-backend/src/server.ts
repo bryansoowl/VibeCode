@@ -11,6 +11,7 @@ import { billsRouter } from './routes/bills'
 import { notificationsRouter } from './routes/notifications'
 import { syncRouter } from './routes/sync'
 import { sendRouter } from './routes/send'
+import { unsnoozeDueRouter } from './routes/unsnooze'
 import { labelsRouter } from './routes/labels'
 import { handleCallback as gmailCallback } from './auth/gmail'
 import { handleCallback as outlookCallback } from './auth/outlook'
@@ -100,6 +101,7 @@ app.get('/auth/outlook/callback', async (req, res) => {
 app.use('/api', requireAuth)
 app.use('/api/accounts', accountsRouter)
 app.use('/api/emails/send', sendRouter)
+app.use('/api/emails/unsnooze-due', unsnoozeDueRouter)
 app.use('/api/emails', emailsRouter)
 app.use('/api/bills', billsRouter)
 app.use('/api/notifications', notificationsRouter)

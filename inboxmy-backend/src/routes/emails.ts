@@ -21,6 +21,7 @@ const listQuery = z.object({
   unread:     z.enum(['1', 'true']).optional(),
   dateFrom:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   dateTo:     z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  snoozed:    z.enum(['1', 'true']).optional(),
 })
 
 const EMAIL_SELECT = `SELECT e.id, e.account_id, e.thread_id, e.subject_enc,
@@ -33,7 +34,7 @@ emailsRouter.get('/', (req: Request, res: Response) => {
   const parsed = listQuery.safeParse(req.query)
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
 
-  const { category, folder, tab, important, accountId, accountIds, limit, offset, search, unread, dateFrom, dateTo } = parsed.data
+  const { category, folder, tab, important, accountId, accountIds, limit, offset, search, unread, dateFrom, dateTo, snoozed } = parsed.data
   const user = (req as any).user
   const db = getDb()
 
@@ -67,6 +68,11 @@ emailsRouter.get('/', (req: Request, res: Response) => {
   if (unread)              { conditions.push('e.is_read = 0') }
   if (dateFromMs !== null) { conditions.push('e.received_at >= ?'); params.push(dateFromMs) }
   if (dateToMs !== null)   { conditions.push('e.received_at <= ?'); params.push(dateToMs) }
+  if (snoozed) {
+    conditions.push('e.snoozed_until IS NOT NULL')
+  } else {
+    conditions.push('e.snoozed_until IS NULL')
+  }
   // Inbox always excludes Promotions tab unless an explicit tab filter is set
   if (folder === 'inbox' && !tab) { conditions.push("e.tab != 'promotions'") }
 
@@ -121,7 +127,7 @@ emailsRouter.get('/unread-count', (req: Request, res: Response) => {
   const row = db.prepare(`
     SELECT COUNT(*) as count FROM emails e
     JOIN accounts a ON a.id = e.account_id
-    WHERE a.user_id = ? AND e.is_read = 0 AND e.folder = 'inbox' AND e.tab != 'promotions'
+    WHERE a.user_id = ? AND e.is_read = 0 AND e.folder = 'inbox' AND e.tab != 'promotions' AND e.snoozed_until IS NULL
   `).get(user.id) as { count: number }
   res.json({ count: row.count })
 })
@@ -165,13 +171,17 @@ emailsRouter.delete('/', (req: Request, res: Response) => {
   res.json({ ok: true })
 })
 
+const readBody = z.object({ read: z.boolean().optional() })
+
 emailsRouter.patch('/:id/read', (req: Request, res: Response) => {
+  const parsed = readBody.safeParse(req.body)
+  const isRead = parsed.success && parsed.data.read === false ? 0 : 1
   const user = (req as any).user
   const db = getDb()
   db.prepare(`
-    UPDATE emails SET is_read = 1
+    UPDATE emails SET is_read = ?
     WHERE id = ? AND account_id IN (SELECT id FROM accounts WHERE user_id = ?)
-  `).run(req.params.id, user.id)
+  `).run(isRead, req.params.id, user.id)
   res.json({ ok: true })
 })
 
@@ -190,6 +200,41 @@ emailsRouter.patch('/:id/folder', (req: Request, res: Response) => {
     WHERE id = ? AND account_id IN (SELECT id FROM accounts WHERE user_id = ?)
   `).run(parsed.data.folder, req.params.id, user.id)
 
+  if (result.changes === 0) return res.status(404).json({ error: 'Email not found' })
+  res.json({ ok: true })
+})
+
+const snoozeBody = z.object({
+  until: z.number().int(),
+})
+
+emailsRouter.patch('/:id/snooze', (req: Request, res: Response) => {
+  const parsed = snoozeBody.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+
+  const now = Date.now()
+  const maxSnooze = now + 365 * 24 * 60 * 60 * 1000
+  if (parsed.data.until <= now) return res.status(400).json({ error: 'until must be in the future' })
+  if (parsed.data.until > maxSnooze) return res.status(400).json({ error: 'until must be within 1 year' })
+
+  const user = (req as any).user
+  const db = getDb()
+  const result = db.prepare(`
+    UPDATE emails SET snoozed_until = ?
+    WHERE id = ? AND account_id IN (SELECT id FROM accounts WHERE user_id = ?)
+  `).run(parsed.data.until, req.params.id, user.id)
+
+  if (result.changes === 0) return res.status(404).json({ error: 'Email not found' })
+  res.json({ ok: true })
+})
+
+emailsRouter.delete('/:id/snooze', (req: Request, res: Response) => {
+  const user = (req as any).user
+  const db = getDb()
+  const result = db.prepare(`
+    UPDATE emails SET snoozed_until = NULL
+    WHERE id = ? AND account_id IN (SELECT id FROM accounts WHERE user_id = ?)
+  `).run(req.params.id, user.id)
   if (result.changes === 0) return res.status(404).json({ error: 'Email not found' })
   res.json({ ok: true })
 })
