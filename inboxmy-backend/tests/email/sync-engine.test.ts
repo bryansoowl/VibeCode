@@ -213,3 +213,36 @@ describe('syncAllAccounts — returns accumulated results', () => {
     expect(accountIds).toContain(acc2)
   })
 })
+
+describe('syncAccount — concurrent sync does not double-insert', () => {
+  beforeEach(() => { vi.resetAllMocks() })
+
+  it('two concurrent syncAccount calls for the same account insert each email exactly once', async () => {
+    const id = randomUUID()
+    seedAccount(id, 'gmail')
+
+    const emailId = randomUUID()
+    const email: import('../../src/email/types').NormalizedEmail = {
+      id: emailId, accountId: id, threadId: null, subject: 'Concurrent test',
+      sender: 'a@b.com', senderName: null, receivedAt: Date.now(), isRead: false,
+      folder: 'inbox', tab: 'primary', isImportant: false, category: null,
+      bodyHtml: null, bodyText: null, snippet: null, rawSize: 50,
+    }
+
+    // Both calls return the same email — INSERT OR IGNORE should prevent duplicates
+    vi.mocked(mockGmailFetch).mockResolvedValue({ emails: [email], newHistoryId: null })
+
+    const [r1, r2] = await Promise.all([
+      syncAccount(id, TEST_KEY),
+      syncAccount(id, TEST_KEY),
+    ])
+
+    const count = getDb()
+      .prepare('SELECT COUNT(*) as n FROM emails WHERE id = ?')
+      .get(emailId) as any
+
+    expect(count.n).toBe(1)  // exactly one row, not two
+    // Combined added count from both calls is 1 (one inserted, one was IGNORE'd)
+    expect(r1.added + r2.added).toBe(1)
+  })
+})

@@ -114,3 +114,45 @@ describe('DELETE /api/accounts/:id — cascade', () => {
     expect(after.n).toBe(0)
   })
 })
+
+describe('GET /api/accounts/connect/gmail — 6-account cap', () => {
+  it('returns 400 when the user already has 6 accounts', async () => {
+    const { agent, id: userId } = await createTestUser()
+    // Seed 6 accounts to hit the cap
+    for (let i = 0; i < 6; i++) {
+      const id = randomUUID()
+      seedAccount(userId, id, `cap-test-${id}@test.com`)
+    }
+
+    const res = await agent.get('/api/accounts/connect/gmail')
+    expect(res.status).toBe(400)
+    expect(res.body.error).toMatch(/limit/i)
+  })
+
+  it('allows connecting when the user has fewer than 6 accounts', async () => {
+    const { agent, id: userId } = await createTestUser()
+    // Seed only 5 — one slot remaining
+    for (let i = 0; i < 5; i++) {
+      const id = randomUUID()
+      seedAccount(userId, id, `cap-ok-${id}@test.com`)
+    }
+
+    // Should redirect (302) to the OAuth URL, not return 400
+    const res = await agent.get('/api/accounts/connect/gmail')
+    expect(res.status).toBe(302)
+  })
+})
+
+describe('GET /api/accounts/connect/outlook — 6-account cap', () => {
+  it('returns 400 when the user already has 6 accounts', async () => {
+    const { agent, id: userId } = await createTestUser()
+    for (let i = 0; i < 6; i++) {
+      const id = randomUUID()
+      seedAccount(userId, id, `outlook-cap-${id}@test.com`)
+    }
+
+    const res = await agent.get('/api/accounts/connect/outlook')
+    expect(res.status).toBe(400)
+    expect(res.body.error).toMatch(/limit/i)
+  })
+})

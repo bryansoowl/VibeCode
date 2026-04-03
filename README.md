@@ -761,10 +761,6 @@ Completed so far:
   PATCH /api/emails/:id/folder (inbox/sent/spam/draft/trash/archive), OAuth send scopes added to
   Gmail and Outlook. 235 backend tests (239 total). Frontend compose UI (Tasks 8-10) is pending.
 
-Next goal: complete Plan 10 frontend tasks (Tasks 8-10) — wire compose modal in frontend/app.js
-and frontend/index.html (openCompose, closeCompose, sendEmail, moveEmail, account picker, Forward
-button, Archive sidebar entry), then move to Plan 11 (Snooze + Focused Inbox + Smart Groups).
-```
-
+Next goal: FIXED THE FOLLOWING. 1. Remove Inbox and Focused as well, not just the frontend but the backend of it so that it dont leave any unused code. 2. Reaarange the order of the navigation bar to: All Mail, Important, Work, Bills, Receipts, Government, Promotions, Snoozed, Sent, Drafts, Spam. You should also add an Archived navigation bar, so that user can see what is acrchived.
 
 

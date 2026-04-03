@@ -15,14 +15,24 @@ accountsRouter.get('/', (req, res) => {
   res.json({ accounts })
 })
 
+const ACCOUNT_LIMIT = 6
+
 // Embed sessionId as OAuth state so the callback can resolve the user
 accountsRouter.get('/connect/gmail', (req, res) => {
+  const db = getDb()
+  const user = (req as any).user
+  const { n } = db.prepare('SELECT COUNT(*) as n FROM accounts WHERE user_id = ?').get(user.id) as any
+  if (n >= ACCOUNT_LIMIT) return res.status(400).json({ error: `Account limit reached (max ${ACCOUNT_LIMIT})` })
   const sessionId = (req as any).cookies?.session
   const url = getGmailUrl(sessionId)
   res.redirect(url)
 })
 
 accountsRouter.get('/connect/outlook', async (req, res) => {
+  const db = getDb()
+  const user = (req as any).user
+  const { n } = db.prepare('SELECT COUNT(*) as n FROM accounts WHERE user_id = ?').get(user.id) as any
+  if (n >= ACCOUNT_LIMIT) return res.status(400).json({ error: `Account limit reached (max ${ACCOUNT_LIMIT})` })
   const sessionId = (req as any).cookies?.session
   const url = await getOutlookUrl(sessionId)
   res.redirect(url)

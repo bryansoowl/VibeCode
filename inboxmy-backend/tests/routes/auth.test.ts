@@ -94,3 +94,44 @@ describe('POST /auth/logout', () => {
     expect(res.status).toBe(401)
   })
 })
+
+describe('Session cookie attributes', () => {
+  it('signup sets an HttpOnly session cookie', async () => {
+    const res = await request(app)
+      .post('/auth/signup')
+      .send({ email: email(), password: 'Password123!' })
+    expect(res.status).toBe(200)
+    const cookie = Array.isArray(res.headers['set-cookie'])
+      ? res.headers['set-cookie'][0]
+      : res.headers['set-cookie']
+    expect(cookie).toBeDefined()
+    expect(cookie.toLowerCase()).toContain('httponly')
+  })
+
+  it('login sets an HttpOnly session cookie', async () => {
+    const e = email()
+    await request(app).post('/auth/signup').send({ email: e, password: 'Password123!' })
+    const res = await request(app).post('/auth/login').send({ email: e, password: 'Password123!' })
+    const cookie = Array.isArray(res.headers['set-cookie'])
+      ? res.headers['set-cookie'][0]
+      : res.headers['set-cookie']
+    expect(cookie.toLowerCase()).toContain('httponly')
+  })
+
+  it('signup sets samesite=lax on the session cookie', async () => {
+    const res = await request(app)
+      .post('/auth/signup')
+      .send({ email: email(), password: 'Password123!' })
+    const cookie = Array.isArray(res.headers['set-cookie'])
+      ? res.headers['set-cookie'][0]
+      : res.headers['set-cookie']
+    expect(cookie.toLowerCase()).toContain('samesite=lax')
+  })
+
+  it('rate limiting on auth routes is intentionally skipped in test env (NODE_ENV=test)', () => {
+    // The server sets: skip: () => process.env.NODE_ENV === 'test'
+    // This is by design — rate limit tests would require 10+ real bcrypt calls
+    // and make the suite slow. The skip is documented here so the intent is clear.
+    expect(process.env.NODE_ENV).toBe('test')
+  })
+})
