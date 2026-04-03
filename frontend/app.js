@@ -1598,13 +1598,11 @@ async function ctxAction(action) {
   }
 
   if (action === 'mark-read') {
-    closeCtxMenu()
     markEmailRead(id, true)
     return
   }
 
   if (action === 'mark-unread') {
-    closeCtxMenu()
     markEmailRead(id, false)
     return
   }
