@@ -1122,7 +1122,7 @@ async function doSync() {
       showEmailNotifications(syncResult.emails);
     }
     // Reload all data panels
-    await Promise.all([loadEmails(true), loadAccounts(), loadBills(), loadCategoryBadges()]);
+    await Promise.all([loadEmails(true), loadAccounts(), loadBills(), refreshUnreadCounts()]);
     if (status) {
       status.textContent = 'Last sync: ' + new Date().toLocaleTimeString('en-MY', {
         hour: '2-digit', minute: '2-digit', hour12: true
@@ -1383,7 +1383,7 @@ function confirmResync(accountId, label) {
         await apiFetch('/api/accounts/' + accountId + '/emails', { method: 'DELETE' });
         showProgress('Re-syncing…', 'Fetching fresh messages from your account');
         await triggerSync(accountId);
-        await Promise.all([loadEmails(true), loadAccounts(), loadBills(), loadCategoryBadges()]);
+        await Promise.all([loadEmails(true), loadAccounts(), loadBills(), refreshUnreadCounts()]);
         renderSettingsAccounts();
         showToast('Re-sync complete!');
       } finally {
@@ -1407,7 +1407,7 @@ function confirmWipeAll() {
         document.getElementById('email-count').textContent = '0 emails';
         document.getElementById('ed-empty').style.display = '';
         document.getElementById('ed-content').style.display = 'none';
-        await Promise.all([loadAccounts(), loadBills(), loadCategoryBadges()]);
+        await Promise.all([loadAccounts(), loadBills(), refreshUnreadCounts()]);
         renderSettingsAccounts();
         showToast('All email data deleted.');
       } finally {
@@ -1429,13 +1429,11 @@ if (window.inboxmy) {
   // Background sync completed — silently refresh email list + badges
   window.inboxmy.onSyncComplete(function() {
     loadEmails(true)
-    loadCategoryBadges()
-    refreshUnreadCount()
+    refreshUnreadCounts()
   })
 
-  window.inboxmy.onNewEmails(({ unreadCount: count, emails }) => {
-    unreadCount = count
-    renderUnreadBadge()
+  window.inboxmy.onNewEmails(({ emails }) => {
+    refreshUnreadCounts()
     if (emails) showEmailNotifications(emails)
   })
 
@@ -1485,10 +1483,9 @@ async function backgroundSyncPoll() {
     const result = await triggerSync();
     if (result.added > 0 && Array.isArray(result.emails)) {
       showEmailNotifications(result.emails);
-      refreshUnreadCount();
     }
     loadEmails(true);
-    loadCategoryBadges();
+    refreshUnreadCounts();
   } catch { /* non-critical — ignore failures */ }
 }
 
@@ -1499,12 +1496,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     loadAccounts(),
     loadEmails(true),
     loadBills(),
-    loadCategoryBadges(),
-    refreshUnreadCount(),
+    refreshUnreadCounts(),
   ]);
   loadLabels()
   refreshFocusedBadge()
-  refreshSnoozedBadge()
 
   // Request notification permission early so it's ready when emails arrive
   if (Notification.permission === 'default') Notification.requestPermission()
@@ -1537,9 +1532,10 @@ function openCtxMenu(e, emailId, emailData) {
   ctxEmailId = emailId
   ctxEmailData = emailData
 
-  // Toggle read label
-  const toggleEl = document.getElementById('ctx-toggle-read')
-  if (toggleEl) toggleEl.textContent = emailData.is_read ? '✉ Mark as unread' : '✉ Mark as read'
+  const markReadEl   = document.getElementById('ctx-mark-read')
+  const markUnreadEl = document.getElementById('ctx-mark-unread')
+  if (markReadEl)   markReadEl.style.display   = emailData.is_read ? 'none' : ''
+  if (markUnreadEl) markUnreadEl.style.display = emailData.is_read ? '' : 'none'
 
   // Find from sender
   const senderEl = document.getElementById('ctx-find-sender')
@@ -1601,13 +1597,15 @@ async function ctxAction(action) {
     return
   }
 
-  if (action === 'toggle-read') {
-    const newRead = !data.is_read
-    await apiFetch(`/api/emails/${id}/read`, { method: 'PATCH', body: JSON.stringify({ read: newRead }) })
-    const row = document.getElementById('row-' + id)
-    if (row) row.classList.toggle('unread', !newRead)
-    const cached = emailCache.find(e => e.id === id)
-    if (cached) cached.is_read = newRead
+  if (action === 'mark-read') {
+    closeCtxMenu()
+    markEmailRead(id, true)
+    return
+  }
+
+  if (action === 'mark-unread') {
+    closeCtxMenu()
+    markEmailRead(id, false)
     return
   }
 
@@ -1699,7 +1697,7 @@ function ctxSnoozePreset(preset) {
   const id = ctxEmailId
   closeCtxMenu()
   apiFetch(`/api/emails/${id}/snooze`, { method: 'PATCH', body: JSON.stringify({ until }) })
-    .then(() => { removeEmailFromList(id); refreshSnoozedBadge() })
+    .then(() => { removeEmailFromList(id); refreshUnreadCounts() })
     .catch(e => showToast('Snooze failed: ' + e.message))
 }
 
@@ -1718,7 +1716,7 @@ async function ctxSnoozeApplyCustom() {
   try {
     await apiFetch(`/api/emails/${id}/snooze`, { method: 'PATCH', body: JSON.stringify({ until }) })
     removeEmailFromList(id)
-    refreshSnoozedBadge()
+    refreshUnreadCounts()
   } catch (e) {
     showToast('Snooze failed: ' + e.message)
   }
