@@ -18,7 +18,7 @@ export async function fetchNewEmails(
   const result = await client
     .api('/me/messages')
     .filter(`receivedDateTime gt ${since}`)
-    .select('id,subject,from,receivedDateTime,isRead,bodyPreview,body,conversationId,size')
+    .select('id,subject,from,receivedDateTime,isRead,bodyPreview,body,conversationId')
     .top(50)
     .get()
 

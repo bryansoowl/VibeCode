@@ -153,6 +153,10 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 .ed-body::-webkit-scrollbar{width:4px}
 .ed-body::-webkit-scrollbar-thumb{background:var(--cream3)}
 .ed-body iframe{width:100%;border:none;display:block}
+.ed-attachments{display:flex;flex-wrap:wrap;gap:8px;padding:12px 0 4px}
+.att-chip{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--cream);text-decoration:none;color:var(--ink2);font-size:12px;transition:background .15s}
+.att-chip:hover{background:var(--cream2)}
+.att-size{color:var(--ink4);font-size:11px}
 .email-content{font-size:14px;color:var(--ink2);line-height:1.75;max-width:640px}
 .email-content p{margin-bottom:14px}
 .email-content .highlight{background:var(--amber-bg);padding:2px 6px;border-radius:4px;font-weight:600;color:var(--amber)}
@@ -382,53 +386,44 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
     <button class="sb-compose" onclick="openCompose()" id="compose-btn">+ Compose</button>
 
     <div class="sb-section">
-      <div class="sb-item active" id="folder-focused" onclick="setFolder('focused', this)">
-        <span class="sb-icon">⭐</span> Focused
-        <span class="sb-badge" id="badge-focused"></span>
-      </div>
-      <div class="sb-item" id="folder-snoozed" onclick="setFolder('snoozed', this)">
-        <span class="sb-icon">🕐</span> Snoozed
-        <span class="sb-badge" id="badge-snoozed"></span>
-      </div>
-      <div class="sb-item" onclick="setFolder('inbox', this)" id="folder-inbox">
-        <span class="sb-icon">📥</span>
-        <span id="lbl-inbox">Inbox</span>
-        <span class="sb-badge" id="badge-inbox"></span>
-      </div>
-      <div class="sb-item" onclick="setFolder('allmail', this)" id="folder-allmail">
+      <div class="sb-item active" onclick="setFolder('allmail', this)" id="folder-allmail">
         <span class="sb-icon">📬</span>
         <span>All Mail</span>
-        <span class="sb-badge grey" id="badge-allmail"></span>
-      </div>
-      <div class="sb-item" onclick="setFolder('bills', this)" id="folder-bills">
-        <span class="sb-icon">⚡</span>
-        <span id="lbl-bills">Bills</span>
-        <span class="sb-badge" style="background:var(--amber);color:#fff" id="badge-bills"></span>
-      </div>
-      <div class="sb-item" onclick="setFolder('govt', this)" id="folder-govt">
-        <span class="sb-icon">🏛️</span>
-        <span id="lbl-govt">Government</span>
-        <span class="sb-badge" style="background:var(--teal);color:#fff" id="badge-govt"></span>
-      </div>
-      <div class="sb-item" onclick="setFolder('receipts', this)" id="folder-receipts">
-        <span class="sb-icon">🛍️</span>
-        <span id="lbl-receipts">Receipts</span>
-        <span class="sb-badge grey" id="badge-receipts"></span>
-      </div>
-      <div class="sb-item" onclick="setFolder('work', this)" id="folder-work">
-        <span class="sb-icon">💼</span>
-        <span id="lbl-work">Work</span>
-        <span class="sb-badge" id="badge-work"></span>
+        <span class="sb-badge" id="badge-allmail"></span>
       </div>
       <div class="sb-item" onclick="setFolder('important', this)" id="folder-important">
         <span class="sb-icon">⭐</span>
         <span id="lbl-important">Important</span>
         <span class="sb-badge" style="background:var(--amber);color:#fff" id="badge-important"></span>
       </div>
+      <div class="sb-item" onclick="setFolder('work', this)" id="folder-work">
+        <span class="sb-icon">💼</span>
+        <span id="lbl-work">Work</span>
+        <span class="sb-badge" id="badge-work"></span>
+      </div>
+      <div class="sb-item" onclick="setFolder('bills', this)" id="folder-bills">
+        <span class="sb-icon">⚡</span>
+        <span id="lbl-bills">Bills</span>
+        <span class="sb-badge" style="background:var(--amber);color:#fff" id="badge-bills"></span>
+      </div>
+      <div class="sb-item" onclick="setFolder('receipts', this)" id="folder-receipts">
+        <span class="sb-icon">🛍️</span>
+        <span id="lbl-receipts">Receipts</span>
+        <span class="sb-badge grey" id="badge-receipts"></span>
+      </div>
+      <div class="sb-item" onclick="setFolder('govt', this)" id="folder-govt">
+        <span class="sb-icon">🏛️</span>
+        <span id="lbl-govt">Government</span>
+        <span class="sb-badge" style="background:var(--teal);color:#fff" id="badge-govt"></span>
+      </div>
       <div class="sb-item" onclick="setFolder('promotions', this)" id="folder-promotions">
         <span class="sb-icon">🏷️</span>
         <span>Promotions</span>
         <span class="sb-badge" style="background:var(--purple);color:#fff" id="badge-promotions"></span>
+      </div>
+      <div class="sb-item" id="folder-snoozed" onclick="setFolder('snoozed', this)">
+        <span class="sb-icon">🕐</span> Snoozed
+        <span class="sb-badge" id="badge-snoozed"></span>
       </div>
       <div class="sb-item" onclick="setFolder('sent', this)" id="folder-sent">
         <span class="sb-icon">📤</span>
@@ -515,12 +510,13 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
           <div class="ed-actions">
             <button class="ed-btn" onclick="showToast('Archived!')">Archive</button>
             <button class="ed-btn" onclick="showToast('Marked spam!')">Spam</button>
-            <button class="ed-btn primary" onclick="openCompose()">Reply</button>
+            <button class="ed-btn primary" id="ed-reply-btn" onclick="openCompose()">Reply</button>
           </div>
         </div>
       </div>
       <div id="ed-smart-card"></div>
       <div class="ed-body">
+        <div id="ed-attachments" class="ed-attachments" style="display:none"></div>
         <div class="email-content" id="ed-body-content"></div>
       </div>
     </div>
@@ -697,17 +693,78 @@ function setLang(l) {
 }
 
 // ── COMPOSE ───────────────────────────────────────────────────────────────
-function openCompose() { document.getElementById('compose').classList.add('show'); }
-function closeCompose() { document.getElementById('compose').classList.remove('show'); }
-function sendEmail() {
-  const to = document.getElementById('compose-to').value;
-  const sub = document.getElementById('compose-subject').value;
-  if (!to) { showToast('Please enter a recipient'); return; }
-  closeCompose();
-  document.getElementById('compose-to').value='';
-  document.getElementById('compose-subject').value='';
-  document.getElementById('compose-body').value='';
-  showToast('Email sent successfully!');
+let _composeReplyToEmailId = null
+let _composeAccountId = null
+
+function openCompose(params) {
+  _composeReplyToEmailId = null
+  _composeAccountId = null
+
+  const toEl = document.getElementById('compose-to')
+  const subEl = document.getElementById('compose-subject')
+  const bodyEl = document.getElementById('compose-body')
+  const titleEl = document.getElementById('lbl-new-message')
+
+  toEl.value = ''; subEl.value = ''; bodyEl.value = ''
+
+  const email = window.currentDetailEmail
+  if (params && params.emailId && email && email.id === params.emailId) {
+    _composeReplyToEmailId = params.emailId
+    if (params.mode === 'reply' || params.mode === 'reply-all') {
+      toEl.value = email.sender || ''
+      subEl.value = email.subject ? 'Re: ' + email.subject : ''
+      if (titleEl) titleEl.textContent = 'Reply'
+    } else if (params.mode === 'forward') {
+      subEl.value = email.subject ? 'Fwd: ' + email.subject : ''
+      if (titleEl) titleEl.textContent = 'Forward'
+    }
+  } else {
+    if (titleEl) titleEl.textContent = 'New message'
+    // Pick first available account for new compose
+    const accounts = typeof accountsData !== 'undefined' ? accountsData : []
+    if (accounts.length > 0) _composeAccountId = accounts[0].id
+  }
+
+  document.getElementById('compose').classList.add('show')
+  toEl.focus()
+}
+
+function closeCompose() { document.getElementById('compose').classList.remove('show') }
+
+async function sendEmail() {
+  const to = document.getElementById('compose-to').value.trim()
+  const subject = document.getElementById('compose-subject').value.trim()
+  const body = document.getElementById('compose-body').value.trim()
+
+  if (!to) { showToast('Please enter a recipient'); return }
+  if (!subject) { showToast('Please enter a subject'); return }
+
+  const payload = { to, subject, body }
+  if (_composeReplyToEmailId) {
+    payload.replyToEmailId = _composeReplyToEmailId
+  } else if (_composeAccountId) {
+    payload.accountId = _composeAccountId
+  } else {
+    showToast('No email account found. Please connect an account first.')
+    return
+  }
+
+  const sendBtn = document.getElementById('lbl-send')
+  if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…' }
+
+  try {
+    await apiFetch('/api/emails/send', { method: 'POST', body: JSON.stringify(payload) })
+    closeCompose()
+    document.getElementById('compose-to').value = ''
+    document.getElementById('compose-subject').value = ''
+    document.getElementById('compose-body').value = ''
+    showToast('Email sent!')
+    if (typeof refreshUnreadCounts === 'function') refreshUnreadCounts()
+  } catch (err) {
+    showToast('Send failed: ' + (err.message || 'error'))
+  } finally {
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send' }
+  }
 }
 
 // ── TOAST ─────────────────────────────

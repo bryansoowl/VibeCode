@@ -3,6 +3,7 @@ import { Router, type Request, type Response } from 'express'
 import { getDb } from '../db'
 import { decrypt } from '../crypto'
 import { z } from 'zod'
+import { listAttachments, getAttachmentContent } from '../email/attachments'
 
 export const emailsRouter = Router()
 
@@ -143,7 +144,7 @@ interface UnreadCounts {
   total_unread: number
   bills: number; govt: number; receipts: number; work: number
   important: number; promotions: number; snoozed: number
-  sent: number; draft: number; spam: number; archived: number
+  sent: number; draft: number; spam: number
 }
 
 function computeUnreadCounts(db: ReturnType<typeof getDb>, userId: string): UnreadCounts {
@@ -160,8 +161,7 @@ function computeUnreadCounts(db: ReturnType<typeof getDb>, userId: string): Unre
                   AND e.snoozed_until > (strftime('%s','now') * 1000)                  THEN 1 END) AS snoozed,
       COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.folder='sent'      THEN 1 END) AS sent,
       COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.folder='draft'     THEN 1 END) AS draft,
-      COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.folder='spam'      THEN 1 END) AS spam,
-      COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.folder='archive'   THEN 1 END) AS archived
+      COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.folder='spam'      THEN 1 END) AS spam
     FROM emails e
     JOIN accounts a ON a.id = e.account_id
     WHERE a.user_id = ?
@@ -171,6 +171,54 @@ function computeUnreadCounts(db: ReturnType<typeof getDb>, userId: string): Unre
 emailsRouter.get('/unread-counts', (req: Request, res: Response) => {
   const user = (req as any).user
   res.json(computeUnreadCounts(getDb(), user.id))
+})
+
+// GET /api/emails/:id/attachments — list attachments for an email
+emailsRouter.get('/:id/attachments', async (req: Request, res: Response) => {
+  const user = (req as any).user
+  const db = getDb()
+  const row = db.prepare(`
+    SELECT e.id, e.account_id, a.provider
+    FROM emails e
+    JOIN accounts a ON a.id = e.account_id
+    WHERE e.id = ? AND a.user_id = ?
+  `).get(req.params.id, user.id) as any
+
+  if (!row) return res.status(404).json({ error: 'Email not found' })
+
+  try {
+    const atts = await listAttachments(row.id, row.account_id, row.provider)
+    res.json(atts)
+  } catch {
+    res.json([])
+  }
+})
+
+// GET /api/emails/:id/attachments/:attId — proxy attachment content
+emailsRouter.get('/:id/attachments/:attId', async (req: Request, res: Response) => {
+  const user = (req as any).user
+  const db = getDb()
+  const row = db.prepare(`
+    SELECT e.id, e.account_id, a.provider
+    FROM emails e
+    JOIN accounts a ON a.id = e.account_id
+    WHERE e.id = ? AND a.user_id = ?
+  `).get(req.params.id, user.id) as any
+
+  if (!row) return res.status(404).json({ error: 'Email not found' })
+
+  try {
+    const { data, contentType, name } = await getAttachmentContent(
+      row.id as string, row.account_id as string, row.provider as string, req.params.attId as string
+    )
+    const safeName = name.replace(/[^\w.\-() ]/g, '_')
+    res.set('Content-Type', contentType)
+    res.set('Content-Disposition', `inline; filename="${safeName}"`)
+    res.set('Content-Length', String(data.length))
+    res.send(data)
+  } catch (err: any) {
+    res.status(502).json({ error: err.message })
+  }
 })
 
 emailsRouter.get('/:id', (req: Request, res: Response) => {

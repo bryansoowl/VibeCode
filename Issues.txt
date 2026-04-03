@@ -1,0 +1,10 @@
+Questions
+1. how is the data being stored. Will it be stored for the rest of their life? How many emails can be stored. Lets say if user were to want to look up on a year agos email can they still 
+search it up or it will be gone. 
+        Follow up : If we were to want to have user to store for years do we have to change the storage structure? do we have to subscribe to a cloud service for this? Do user pay for it or one admin
+        will pay for it? what do you recommend and will it be costly? Example i noticed now is that i can't access older files. If i were to always sync all the mails it will take long time
+        is there a way to sync everything there is faster? or mayb when load when search? not rendering everyhting as once?
+
+2. 
+
+Remove Unread count at the side of profile picture, remove the language change into the settings. 

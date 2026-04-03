@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:bluemail.me)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:bluemailtutorial.com)",
+      "WebFetch(domain:bluemail.help)",
+      "WebFetch(domain:tekpon.com)",
+      "WebFetch(domain:webcache.googleusercontent.com)",
+      "WebFetch(domain:web.archive.org)"
+    ]
+  }
+}

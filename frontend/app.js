@@ -42,7 +42,7 @@ let unreadCounts = {
   total_unread: 0,
   bills: 0, govt: 0, receipts: 0, work: 0,
   important: 0, promotions: 0, snoozed: 0,
-  sent: 0, draft: 0, spam: 0, archived: 0,
+  sent: 0, draft: 0, spam: 0,
 }
 
 // Tracks in-flight mark-read requests — prevents optimistic update races
@@ -56,17 +56,17 @@ function renderUnreadBadges(counts = unreadCounts) {
     if (id === 'unread-badge') el.style.display = n > 0 ? '' : 'none'
   }
   set('unread-badge',     counts.total_unread)
-  set('badge-bills',      counts.bills)
-  set('badge-govt',       counts.govt)
-  set('badge-receipts',   counts.receipts)
-  set('badge-work',       counts.work)
+  set('badge-allmail',    counts.total_unread)
   set('badge-important',  counts.important)
+  set('badge-work',       counts.work)
+  set('badge-bills',      counts.bills)
+  set('badge-receipts',   counts.receipts)
+  set('badge-govt',       counts.govt)
   set('badge-promotions', counts.promotions)
   set('badge-snoozed',    counts.snoozed)
   set('badge-sent',       counts.sent)
   set('badge-draft',      counts.draft)
   set('badge-spam',       counts.spam)
-  set('badge-archived',   counts.archived)
 }
 
 async function refreshUnreadCounts() {
@@ -108,7 +108,6 @@ async function markEmailRead(emailId, isRead) {
   if (email.folder === 'sent')      optimistic.sent       = Math.max(0, optimistic.sent       + delta)
   if (email.folder === 'draft')     optimistic.draft      = Math.max(0, optimistic.draft      + delta)
   if (email.folder === 'spam')      optimistic.spam       = Math.max(0, optimistic.spam       + delta)
-  if (email.folder === 'archive')   optimistic.archived   = Math.max(0, optimistic.archived   + delta)
   renderUnreadBadges(optimistic)
 
   pendingReadRequests.set(emailId, isRead)
@@ -238,7 +237,7 @@ async function triggerSync(accountId) {
 }
 
 // ── STATE ────────────────────────────────────────────────────────────────────
-let currentFolder = 'inbox';
+let currentFolder = 'allmail';
 let currentFilter = 'all';
 let currentSearch = '';
 let currentAccountId = null;
@@ -294,26 +293,23 @@ function setLabelFolder(labelId, el) {
 }
 
 // Maps sidebar folder names to API query params.
-// 'inbox'   → folder=inbox (backend auto-excludes promotions)
 // 'allmail' → no params = every email, no filter
 const FOLDER_PARAMS = {
-  inbox:      { folder: 'inbox' },
   allmail:    {},
-  bills:      { category: 'bill' },
-  govt:       { category: 'govt' },
-  receipts:   { category: 'receipt' },
-  work:       { category: 'work' },
   important:  { important: '1' },
+  work:       { category: 'work' },
+  bills:      { category: 'bill' },
+  receipts:   { category: 'receipt' },
+  govt:       { category: 'govt' },
   promotions: { tab: 'promotions' },
+  snoozed:    { snoozed: '1' },
   sent:       { folder: 'sent' },
   draft:      { folder: 'draft' },
   spam:       { folder: 'spam' },
-  focused:    { folder: 'inbox', tab: 'primary' },
-  snoozed:    { snoozed: '1' },
 };
 
 function buildEmailParams(offset = 0) {
-  let folderParams = FOLDER_PARAMS[currentFolder] || { folder: 'inbox' };
+  let folderParams = FOLDER_PARAMS[currentFolder] || {};
   // Label folder is a special case — use labelId param instead of folderParams
   if (currentFolder === 'label' && currentLabelId) {
     folderParams = { labelId: currentLabelId }
@@ -505,10 +501,9 @@ function setFolder(f, el) {
   document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('active'));
   if (el) el.classList.add('active');
   const titles = {
-    inbox: 'Inbox', allmail: 'All Mail', bills: 'Bills', govt: 'Government',
-    receipts: 'Receipts', work: 'Work', important: 'Important',
-    promotions: 'Promotions', sent: 'Sent', draft: 'Drafts', spam: 'Spam',
-    focused: 'Focused', snoozed: 'Snoozed',
+    allmail: 'All Mail', important: 'Important', work: 'Work', bills: 'Bills',
+    receipts: 'Receipts', govt: 'Government', promotions: 'Promotions',
+    snoozed: 'Snoozed', sent: 'Sent', draft: 'Drafts', spam: 'Spam',
   };
   document.getElementById('folder-title').textContent = titles[f] || f;
   document.querySelectorAll('.el-filter').forEach(i => i.classList.remove('active'));
@@ -746,6 +741,12 @@ async function selectEmail(id) {
 function selectEmailById(id) { selectEmail(id); }
 
 function renderEmailDetail(email) {
+  window.currentDetailEmail = email
+
+  // Wire the Reply button to this specific email
+  const replyBtn = document.getElementById('ed-reply-btn')
+  if (replyBtn) replyBtn.onclick = () => openCompose({ mode: 'reply', emailId: email.id })
+
   const name = email.sender_name || email.sender || '?';
   const initial = name.charAt(0).toUpperCase();
   const avatarColors = { bill: '#c97a1a', govt: '#0d7a6e', receipt: '#5c48c9', work: '#2a6abf' };
@@ -814,6 +815,28 @@ function renderEmailDetail(email) {
   }
 
   renderSmartCard(email);
+
+  // Attachments
+  const attSection = document.getElementById('ed-attachments')
+  if (attSection) {
+    attSection.innerHTML = ''
+    attSection.style.display = 'none'
+    apiFetch(`/api/emails/${encodeURIComponent(email.id)}/attachments`).then(atts => {
+      if (!atts || atts.length === 0) return
+      attSection.style.display = ''
+      attSection.innerHTML = atts.map(a => {
+        const icon = a.contentType && a.contentType.includes('pdf') ? '📄'
+          : a.contentType && a.contentType.startsWith('image/') ? '🖼️' : '📎'
+        const kb = a.size > 1024 * 1024
+          ? (a.size / 1024 / 1024).toFixed(1) + ' MB'
+          : Math.round((a.size || 0) / 1024) + ' KB'
+        const href = `/api/emails/${encodeURIComponent(email.id)}/attachments/${encodeURIComponent(a.id)}`
+        return `<a class="att-chip" href="${href}" target="_blank" rel="noopener noreferrer">
+          <span>${icon}</span><span>${escHtml(a.name)}</span><span class="att-size">${kb}</span>
+        </a>`
+      }).join('')
+    }).catch(() => {})
+  }
 }
 
 function renderSmartCard(email) {
@@ -1456,14 +1479,6 @@ if (window.inboxmy) {
 }
 
 // ── BACKGROUND SYNC POLL ─────────────────────────────────────────────────────
-async function refreshFocusedBadge() {
-  try {
-    const data = await apiFetch('/api/emails?folder=inbox&tab=primary&unread=1&limit=1')
-    const el = document.getElementById('badge-focused')
-    if (el) el.textContent = data.total > 0 ? (data.total > 99 ? '99+' : data.total) : ''
-  } catch { /* silent */ }
-}
-
 async function promptNewLabel() {
   const name = prompt('Label name:')
   if (!name || !name.trim()) return
@@ -1499,7 +1514,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     refreshUnreadCounts(),
   ]);
   loadLabels()
-  refreshFocusedBadge()
 
   // Request notification permission early so it's ready when emails arrive
   if (Notification.permission === 'default') Notification.requestPermission()

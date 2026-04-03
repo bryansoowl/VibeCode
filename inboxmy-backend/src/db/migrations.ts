@@ -101,6 +101,8 @@ const MIGRATIONS: string[] = [
   // Migration 8: composite index for fast unread count aggregation
   `CREATE INDEX IF NOT EXISTS idx_emails_unread
     ON emails(account_id, folder, is_read, tab, snoozed_until)`,
+  // Migration 9: persist MSAL token cache per Outlook account so refresh tokens survive restarts
+  `ALTER TABLE accounts ADD COLUMN msal_cache TEXT`,
 ]
 
 export function runMigrations(db: Database.Database): void {
