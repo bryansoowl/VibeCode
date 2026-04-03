@@ -138,15 +138,39 @@ emailsRouter.get('/', (req: Request, res: Response) => {
   }
 })
 
-emailsRouter.get('/unread-count', (req: Request, res: Response) => {
-  const user = (req as any).user
-  const db = getDb()
-  const row = db.prepare(`
-    SELECT COUNT(*) as count FROM emails e
+// ── SHARED: compute all unread/badge counts for a user in one SQL query ──────
+interface UnreadCounts {
+  total_unread: number
+  bills: number; govt: number; receipts: number; work: number
+  important: number; promotions: number; snoozed: number
+  sent: number; draft: number; spam: number; archived: number
+}
+
+function computeUnreadCounts(db: ReturnType<typeof getDb>, userId: string): UnreadCounts {
+  return db.prepare(`
+    SELECT
+      COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL THEN 1 END) AS total_unread,
+      COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.category='bill'    THEN 1 END) AS bills,
+      COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.category='govt'    THEN 1 END) AS govt,
+      COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.category='receipt' THEN 1 END) AS receipts,
+      COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.category='work'    THEN 1 END) AS work,
+      COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.is_important=1     THEN 1 END) AS important,
+      COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.tab='promotions'   THEN 1 END) AS promotions,
+      COUNT(CASE WHEN e.snoozed_until IS NOT NULL
+                  AND e.snoozed_until > (strftime('%s','now') * 1000)                  THEN 1 END) AS snoozed,
+      COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.folder='sent'      THEN 1 END) AS sent,
+      COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.folder='draft'     THEN 1 END) AS draft,
+      COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.folder='spam'      THEN 1 END) AS spam,
+      COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.folder='archive'   THEN 1 END) AS archived
+    FROM emails e
     JOIN accounts a ON a.id = e.account_id
-    WHERE a.user_id = ? AND e.is_read = 0 AND e.folder = 'inbox' AND e.tab != 'promotions' AND e.snoozed_until IS NULL
-  `).get(user.id) as { count: number }
-  res.json({ count: row.count })
+    WHERE a.user_id = ?
+  `).get(userId) as UnreadCounts
+}
+
+emailsRouter.get('/unread-counts', (req: Request, res: Response) => {
+  const user = (req as any).user
+  res.json(computeUnreadCounts(getDb(), user.id))
 })
 
 emailsRouter.get('/:id', (req: Request, res: Response) => {

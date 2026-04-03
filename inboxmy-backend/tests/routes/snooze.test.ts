@@ -177,16 +177,16 @@ describe('POST /api/emails/unsnooze-due', () => {
   })
 })
 
-describe('GET /api/emails/unread-count — snooze exclusion', () => {
+describe('GET /api/emails/unread-counts — snooze exclusion', () => {
   it('does not count snoozed-but-unread emails', async () => {
     const { agent, id: userId } = await createTestUser()
     const accountId = seedAccount(userId)
     seedEmail(userId, accountId)  // normal unread inbox
     seedEmail(userId, accountId, { snoozed_until: FUTURE })  // snoozed unread
 
-    const res = await agent.get('/api/emails/unread-count')
+    const res = await agent.get('/api/emails/unread-counts')
     expect(res.status).toBe(200)
     // Only the non-snoozed email should be counted
-    expect(res.body.count).toBe(1)
+    expect(res.body.total_unread).toBe(1)
   })
 })

@@ -29,6 +29,9 @@ function seedEmail(userId: string, opts: {
   receivedAt?: number
   accountId?: string
   dataKey?: Buffer
+  category?: string       // NEW
+  isImportant?: boolean   // NEW
+  snoozedUntil?: number   // NEW (ms epoch)
 }) {
   const db = getDb()
   const accountId = opts.accountId ?? seedAccount(userId)
@@ -36,8 +39,10 @@ function seedEmail(userId: string, opts: {
   const key = opts.dataKey ?? KEY
 
   db.prepare(`
-    INSERT INTO emails (id, account_id, subject_enc, snippet, sender, received_at, is_read, folder, tab)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO emails
+      (id, account_id, subject_enc, snippet, sender, received_at,
+       is_read, folder, tab, category, is_important, snoozed_until)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     emailId,
     accountId,
@@ -47,70 +52,86 @@ function seedEmail(userId: string, opts: {
     opts.receivedAt ?? Date.now(),
     opts.isRead ? 1 : 0,
     opts.folder ?? 'inbox',
-    opts.tab ?? 'primary'
+    opts.tab ?? 'primary',
+    opts.category ?? null,
+    opts.isImportant ? 1 : 0,
+    opts.snoozedUntil ?? null,
   )
 
   return { emailId, accountId }
 }
 
-describe('GET /api/emails/unread-count', () => {
-  it('returns count of unread inbox non-promotions emails', async () => {
-    const { agent, id: userId } = await createTestUser()
-    seedEmail(userId, { isRead: false, folder: 'inbox', tab: 'primary' })
-    seedEmail(userId, { isRead: false, folder: 'inbox', tab: 'primary' })
-
+describe('GET /api/emails/unread-count (removed)', () => {
+  it('returns 404 — endpoint has been replaced by /unread-counts', async () => {
+    const { agent } = await createTestUser()
     const res = await agent.get('/api/emails/unread-count')
+    expect(res.status).toBe(404)
+  })
+})
 
-    expect(res.status).toBe(200)
-    expect(res.body.count).toBe(2)
+describe('GET /api/emails/unread-counts', () => {
+  it('returns 401 without session', async () => {
+    const { default: request } = await import('supertest')
+    const { app } = await import('../../src/server')
+    const res = await request(app).get('/api/emails/unread-counts')
+    expect(res.status).toBe(401)
   })
 
-  it('excludes read emails', async () => {
-    const { agent, id: userId } = await createTestUser()
-    seedEmail(userId, { isRead: true, folder: 'inbox', tab: 'primary' })
-
-    const res = await agent.get('/api/emails/unread-count')
-
+  it('returns all-zero counts when no emails exist', async () => {
+    const { agent } = await createTestUser()
+    const res = await agent.get('/api/emails/unread-counts')
     expect(res.status).toBe(200)
-    expect(res.body.count).toBe(0)
+    const keys = ['total_unread','bills','govt','receipts','work','important','promotions','snoozed','sent','draft','spam','archived']
+    for (const k of keys) expect(res.body[k]).toBe(0)
   })
 
-  it('excludes Promotions tab emails', async () => {
+  it('total_unread counts unread emails across all folders excluding snoozed', async () => {
     const { agent, id: userId } = await createTestUser()
-    seedEmail(userId, { isRead: false, folder: 'inbox', tab: 'promotions' })
-
-    const res = await agent.get('/api/emails/unread-count')
-
+    seedEmail(userId, { isRead: false, folder: 'inbox' })
+    seedEmail(userId, { isRead: false, folder: 'sent' })
+    seedEmail(userId, { isRead: true,  folder: 'inbox' })     // read — excluded
+    seedEmail(userId, { isRead: false, snoozedUntil: Date.now() + 60_000 }) // snoozed — excluded
+    const res = await agent.get('/api/emails/unread-counts')
     expect(res.status).toBe(200)
-    expect(res.body.count).toBe(0)
+    expect(res.body.total_unread).toBe(2)
   })
 
-  it('excludes non-inbox folders', async () => {
+  it('bills counts unread bill-category emails excluding snoozed', async () => {
     const { agent, id: userId } = await createTestUser()
-    seedEmail(userId, { isRead: false, folder: 'spam', tab: 'primary' })
+    seedEmail(userId, { isRead: false, category: 'bill' })
+    seedEmail(userId, { isRead: true,  category: 'bill' })    // read — excluded
+    seedEmail(userId, { isRead: false, category: 'bill', snoozedUntil: Date.now() + 60_000 }) // snoozed — excluded
+    seedEmail(userId, { isRead: false, category: 'govt' })    // different category
+    const res = await agent.get('/api/emails/unread-counts')
+    expect(res.body.bills).toBe(1)
+  })
 
-    const res = await agent.get('/api/emails/unread-count')
+  it('snoozed counts all snoozed emails regardless of is_read', async () => {
+    const { agent, id: userId } = await createTestUser()
+    const future = Date.now() + 60_000
+    const past   = Date.now() - 60_000
+    seedEmail(userId, { isRead: false, snoozedUntil: future }) // currently snoozed
+    seedEmail(userId, { isRead: true,  snoozedUntil: future }) // currently snoozed (read)
+    seedEmail(userId, { isRead: false, snoozedUntil: past   }) // past snooze — NOT counted
+    const res = await agent.get('/api/emails/unread-counts')
+    expect(res.body.snoozed).toBe(2)
+  })
 
-    expect(res.status).toBe(200)
-    expect(res.body.count).toBe(0)
+  it('important counts unread important emails excluding snoozed', async () => {
+    const { agent, id: userId } = await createTestUser()
+    seedEmail(userId, { isRead: false, isImportant: true })
+    seedEmail(userId, { isRead: true,  isImportant: true })   // read — excluded
+    seedEmail(userId, { isRead: false, isImportant: false })  // not important
+    const res = await agent.get('/api/emails/unread-counts')
+    expect(res.body.important).toBe(1)
   })
 
   it('does not count another user\'s emails', async () => {
     const { id: userId1 } = await createTestUser()
     const { agent: agent2 } = await createTestUser()
-    seedEmail(userId1, { isRead: false, folder: 'inbox', tab: 'primary' })
-
-    const res = await agent2.get('/api/emails/unread-count')
-
-    expect(res.status).toBe(200)
-    expect(res.body.count).toBe(0)
-  })
-
-  it('returns 401 without session', async () => {
-    const { default: request } = await import('supertest')
-    const { app } = await import('../../src/server')
-    const res = await request(app).get('/api/emails/unread-count')
-    expect(res.status).toBe(401)
+    seedEmail(userId1, { isRead: false })
+    const res = await agent2.get('/api/emails/unread-counts')
+    expect(res.body.total_unread).toBe(0)
   })
 })
 
