@@ -3,7 +3,7 @@ import { google } from 'googleapis'
 import { getAuthedClient } from '../auth/gmail'
 import type { NormalizedEmail } from './types'
 
-const FETCH_LIMIT = 50  // per full sync run
+const FETCH_LIMIT = 500  // per full sync run
 
 export async function fetchNewEmails(
   accountId: string,
@@ -13,10 +13,13 @@ export async function fetchNewEmails(
   const auth = await getAuthedClient(accountId)
   const gmail = google.gmail({ version: 'v1', auth })
 
+  console.log(`[gmail] sinceMs=${sinceMs} historyId=${historyId}`)
+
   // ── Incremental mode (History API) ──────────────────────────────────────────
-  // When we have a historyId, use users.history.list — only fetches new message
-  // IDs since the last sync. Very cheap: 1 API call if nothing new.
-  if (historyId) {
+  // Only use incremental mode when we also have a sinceMs — if sinceMs is null
+  // it means a full resync was requested, so skip straight to full sync.
+  if (historyId && sinceMs) {
+    console.log(`[gmail] incremental mode, historyId=${historyId}`)
     try {
       const history = await gmail.users.history.list({
         userId: 'me',
@@ -26,6 +29,7 @@ export async function fetchNewEmails(
 
       const newHistoryId = history.data.historyId ?? historyId
       const records = history.data.history ?? []
+      console.log(`[gmail] history records=${records.length} newHistoryId=${newHistoryId}`)
 
       // Collect unique IDs of newly added messages
       const messageIds = new Set<string>()
@@ -35,6 +39,7 @@ export async function fetchNewEmails(
         }
       }
 
+      console.log(`[gmail] incremental: ${messageIds.size} new message(s)`)
       if (messageIds.size === 0) return { emails: [], newHistoryId }
 
       // Fetch full details only for the new messages
@@ -55,31 +60,42 @@ export async function fetchNewEmails(
   }
 
   // ── Full sync ────────────────────────────────────────────────────────────────
-  // Gmail's `after:` resolves to a date (midnight), exclusive. Subtract 24 h so
-  // emails received on the same calendar day as the last sync are still fetched.
-  // INSERT OR IGNORE in the DB deduplicates anything already stored.
   const BUFFER_MS = 24 * 60 * 60 * 1000
   const query = sinceMs
     ? `after:${Math.floor((sinceMs - BUFFER_MS) / 1000)}`
-    : 'newer_than:30d'
+    : 'newer_than:90d'
 
-  const list = await gmail.users.messages.list({
-    userId: 'me',
-    q: query,
-    maxResults: FETCH_LIMIT,
-    includeSpamTrash: true,
-  })
+  console.log(`[gmail] full sync query="${query}"`)
+
+  let list: any
+  try {
+    list = await gmail.users.messages.list({
+      userId: 'me',
+      q: query,
+      maxResults: FETCH_LIMIT,
+      includeSpamTrash: true,
+    })
+  } catch (err: any) {
+    console.error(`[gmail] messages.list error: ${err.message} code=${err.code} status=${err.status}`)
+    throw err
+  }
+
+  console.log(`[gmail] messages.list returned ${list.data.messages?.length ?? 0} results, nextPageToken=${list.data.nextPageToken ?? 'none'}`)
 
   const messages = list.data.messages ?? []
   const emails: NormalizedEmail[] = []
 
   for (const msg of messages) {
-    const full = await gmail.users.messages.get({
-      userId: 'me',
-      id: msg.id!,
-      format: 'full',
-    })
-    emails.push(normalizeGmailMessage(accountId, full.data))
+    try {
+      const full = await gmail.users.messages.get({
+        userId: 'me',
+        id: msg.id!,
+        format: 'full',
+      })
+      emails.push(normalizeGmailMessage(accountId, full.data))
+    } catch (err: any) {
+      console.error(`[gmail] messages.get error for ${msg.id}: ${err.message}`)
+    }
   }
 
   // Capture current historyId so future syncs can use incremental mode
@@ -87,7 +103,10 @@ export async function fetchNewEmails(
   try {
     const profile = await gmail.users.getProfile({ userId: 'me' })
     newHistoryId = profile.data.historyId ?? null
-  } catch { /* non-fatal */ }
+    console.log(`[gmail] captured newHistoryId=${newHistoryId}`)
+  } catch (err: any) {
+    console.error(`[gmail] getProfile error: ${err.message}`)
+  }
 
   return { emails, newHistoryId }
 }

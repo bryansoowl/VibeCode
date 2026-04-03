@@ -49,6 +49,25 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 .sb-item{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:7px;cursor:pointer;transition:background .1s;font-size:13px;color:var(--ink2);font-weight:500}
 .sb-item:hover{background:var(--cream2)}
 .sb-item.active{background:var(--coral-bg);color:var(--coral)}
+.sb-add-account-btn{display:block;width:100%;text-align:left;background:none;border:1px dashed var(--border2);border-radius:7px;padding:6px 10px;font-size:12px;color:var(--ink4);cursor:pointer;transition:background .1s,color .1s}
+.sb-add-account-btn:hover{background:var(--cream2);color:var(--ink2)}
+.add-acct-provider-btn{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:9px;border:1px solid var(--border2);font-size:13px;font-weight:500;color:var(--ink2);text-decoration:none;transition:background .1s}
+.add-acct-provider-btn:hover{background:var(--cream2)}
+.sb-label-item{position:relative}
+.sb-label-item .sb-label-menu-btn{display:none;margin-left:auto;background:none;border:none;padding:0 4px;font-size:14px;color:var(--ink4);cursor:pointer;line-height:1;border-radius:4px}
+.sb-label-item:hover .sb-label-menu-btn,.sb-label-item.active .sb-label-menu-btn{display:block}
+.sb-label-menu-btn:hover{color:var(--ink2);background:var(--cream3)}
+.sb-label-popup{display:none;position:fixed;z-index:9999;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.15);min-width:160px;padding:4px 0;font-size:13px}
+.sb-label-popup.open{display:block}
+.lm-input{width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-family:var(--sans);font-size:13px;color:var(--ink);background:#fff;outline:none;transition:border-color .15s}
+.lm-input:focus{border-color:var(--coral)}
+.lm-btn-cancel{padding:8px 16px;border-radius:8px;border:1px solid var(--border);background:#fff;font-family:var(--sans);font-size:13px;font-weight:600;color:var(--ink2);cursor:pointer;transition:background .15s}
+.lm-btn-cancel:hover{background:var(--cream2)}
+.lm-btn-save{padding:8px 16px;border-radius:8px;border:none;background:var(--coral);color:#fff;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;transition:background .15s}
+.lm-btn-save:hover{background:var(--coral2)}
+.lm-btn-save:disabled{opacity:.45;cursor:not-allowed}
+.lm-btn-delete{padding:8px 16px;border-radius:8px;border:none;background:var(--coral);color:#fff;font-family:var(--sans);font-size:13px;font-weight:600;cursor:pointer;transition:background .15s}
+.lm-btn-delete:hover{background:var(--coral2)}
 .sb-icon{width:18px;text-align:center;font-size:14px;flex-shrink:0}
 .sb-badge{margin-left:auto;background:var(--coral);color:#fff;border-radius:999px;font-size:10px;font-weight:700;padding:1px 7px;min-width:20px;text-align:center}
 .sb-badge.grey{background:var(--cream3);color:var(--ink3)}
@@ -149,7 +168,7 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 .sc-val.teal{color:var(--teal)}
 .sc-val.amber{color:var(--amber)}
 
-.ed-body{flex:1;overflow-y:auto;overflow-x:hidden;padding:24px 28px;scrollbar-gutter:stable}
+.ed-body{flex:1;overflow-y:auto;overflow-x:auto;padding:24px 28px;scrollbar-gutter:stable}
 .ed-body::-webkit-scrollbar{width:4px}
 .ed-body::-webkit-scrollbar-thumb{background:var(--cream3)}
 .ed-body iframe{width:100%;border:none;display:block}
@@ -361,9 +380,6 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
   <div class="tb-right">
     <button class="tb-lang" id="sync-btn" onclick="doSync()">↻ Sync</button>
     <span id="sync-status" style="font-size:11px;color:var(--ink4)"></span>
-    <button class="tb-lang active" id="lang-en" onclick="setLang('en')">EN</button>
-    <button class="tb-lang" id="lang-bm" onclick="setLang('bm')">BM</button>
-    <span id="unread-badge" class="sb-badge" style="display:none;cursor:default" title="Unread emails"></span>
     <div class="profile-wrap">
       <div class="tb-avatar" id="tb-avatar" onclick="toggleProfileMenu()" title="Account">A</div>
       <div class="profile-dropdown" id="profile-dropdown">
@@ -444,6 +460,16 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 
     <div class="sb-sep"></div>
 
+    <div id="sb-labels-section">
+      <div class="sb-label">LABELS</div>
+      <div id="sb-labels-list"></div>
+      <div class="sb-item sb-label-new" onclick="promptNewLabel()">
+        <span>＋ New label</span>
+      </div>
+    </div>
+
+    <div class="sb-sep"></div>
+
     <div class="sb-section">
       <div class="sb-label" id="lbl-accounts">Accounts</div>
       <div class="sb-account active" onclick="setAccount('all', this)">
@@ -453,22 +479,7 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
       </div>
       <div id="accounts-list"></div>
       <div id="accounts-connect" style="padding:6px 10px;margin-top:4px">
-        <a href="/api/accounts/connect/gmail"
-           style="display:block;font-size:11px;color:var(--ink4);text-decoration:none;padding:4px 0"
-           title="Connect a Gmail account">+ Connect Gmail</a>
-        <a href="/api/accounts/connect/outlook"
-           style="display:block;font-size:11px;color:var(--ink4);text-decoration:none;padding:4px 0"
-           title="Connect an Outlook account">+ Connect Outlook</a>
-      </div>
-    </div>
-
-    <div class="sb-sep"></div>
-
-    <div id="sb-labels-section" style="display:none">
-      <div class="sb-label">LABELS</div>
-      <div id="sb-labels-list"></div>
-      <div class="sb-item sb-label-new" onclick="promptNewLabel()">
-        <span>＋ New label</span>
+        <button class="sb-add-account-btn" onclick="openAddAccountModal()">+ Add account</button>
       </div>
     </div>
   </div>
@@ -635,6 +646,26 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
   </div>
 </div>
 
+<!-- ADD ACCOUNT MODAL -->
+<div class="modal-overlay" id="add-account-modal" onclick="if(event.target===this)closeAddAccountModal()">
+  <div class="modal-box" style="width:320px">
+    <div class="modal-head">
+      <div class="modal-title">Add account</div>
+      <button class="modal-close" onclick="closeAddAccountModal()">×</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:10px;padding:20px">
+      <a href="/api/accounts/connect/gmail" class="add-acct-provider-btn">
+        <img src="https://www.google.com/favicon.ico" width="18" height="18" style="border-radius:3px" alt="">
+        Connect Gmail
+      </a>
+      <a href="/api/accounts/connect/outlook" class="add-acct-provider-btn">
+        <img src="https://outlook.live.com/favicon.ico" width="18" height="18" style="border-radius:3px" alt="">
+        Connect Outlook
+      </a>
+    </div>
+  </div>
+</div>
+
 <!-- CONFIRM DELETE MODAL -->
 <div class="modal-overlay" id="confirm-modal" onclick="if(event.target===this)closeConfirm()">
   <div class="modal-box" style="width:400px">
@@ -660,6 +691,55 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 
 <div id="toast"></div>
 
+<!-- LABEL RENAME MODAL -->
+<div class="modal-overlay" id="label-rename-modal" onclick="if(event.target===this)closeLabelRename()">
+  <div class="modal-box" style="width:340px">
+    <div class="modal-head">
+      <div class="modal-title">Rename label</div>
+      <button class="modal-close" onclick="closeLabelRename()">×</button>
+    </div>
+    <div class="modal-body" style="padding:20px;display:flex;flex-direction:column;gap:16px">
+      <input id="label-rename-input" class="lm-input" type="text" placeholder="Label name" autocomplete="off"
+             oninput="document.getElementById('label-rename-save').disabled=!this.value.trim()"
+             onkeydown="if(event.key==='Enter')submitLabelRename();if(event.key==='Escape')closeLabelRename()">
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="lm-btn-cancel" onclick="closeLabelRename()">Cancel</button>
+        <button class="lm-btn-save" id="label-rename-save" onclick="submitLabelRename()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LABEL DELETE MODAL -->
+<div class="modal-overlay" id="label-delete-modal" onclick="if(event.target===this)closeLabelDelete()">
+  <div class="modal-box" style="width:340px">
+    <div class="modal-head">
+      <div class="modal-title">Delete label</div>
+      <button class="modal-close" onclick="closeLabelDelete()">×</button>
+    </div>
+    <div class="modal-body" style="padding:20px;display:flex;flex-direction:column;gap:16px">
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <div style="font-size:28px;line-height:1">🗑️</div>
+        <div>
+          <div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:4px">Delete "<span id="label-delete-name"></span>"?</div>
+          <div style="font-size:13px;color:var(--ink3);line-height:1.5">The label will be removed. Your emails will not be deleted.</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="lm-btn-cancel" onclick="closeLabelDelete()">Cancel</button>
+        <button class="lm-btn-delete" onclick="submitLabelDelete()">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LABEL CONTEXT POPUP -->
+<div id="label-popup" class="sb-label-popup">
+  <div class="ctx-item" onclick="labelMenuAction('rename')">✏️ Rename</div>
+  <div class="ctx-divider"></div>
+  <div class="ctx-item" style="color:var(--coral)" onclick="labelMenuAction('delete')">🗑️ Delete label</div>
+</div>
+
 <!-- PROGRESS OVERLAY -->
 <div id="progress-overlay">
   <div class="progress-card">
@@ -670,27 +750,6 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 </div>
 
 <script>
-// ── LANG ──────────────────────────────────────────────────────────────────
-const LABELS = {
-  en: { inbox:'All inbox', bills:'Bills', govt:'Government', receipts:'Receipts', work:'Work', sent:'Sent', spam:'Spam', accounts:'Accounts', 'all-accounts':'All accounts', 'compose-btn':'+ Compose', 'bills-due':'Bills due soon', 'bills-total':'Bills total', shopping:'Shopping', 'new-message':'New message', to:'To', 'subject-compose':'Subject', send:'Send', },
-  bm: { inbox:'Semua peti masuk', bills:'Bil', govt:'Kerajaan', receipts:'Resit', work:'Kerja', sent:'Dihantar', spam:'Spam', accounts:'Akaun', 'all-accounts':'Semua akaun', 'compose-btn':'+ Karang', 'bills-due':'Bil perlu dibayar', 'bills-total':'Jumlah bil', shopping:'Membeli-belah', 'new-message':'Mesej baru', to:'Kepada', 'subject-compose':'Tajuk', send:'Hantar', },
-};
-let lang = 'en';
-function setLang(l) {
-  lang = l;
-  document.getElementById('lang-en').className = 'tb-lang' + (l==='en'?' active':'');
-  document.getElementById('lang-bm').className = 'tb-lang' + (l==='bm'?' active':'');
-  const lb = LABELS[l];
-  Object.entries(lb).forEach(([k,v]) => {
-    const el = document.getElementById('lbl-'+k);
-    if (el) el.textContent = v;
-  });
-  document.getElementById('compose-btn').textContent = lb['compose-btn'];
-  document.getElementById('lbl-send').textContent = lb['send'];
-  document.getElementById('lbl-new-message').textContent = lb['new-message'];
-  document.getElementById('lbl-to').textContent = lb['to'];
-  document.getElementById('lbl-subject-compose').textContent = lb['subject-compose'];
-}
 
 // ── COMPOSE ───────────────────────────────────────────────────────────────
 let _composeReplyToEmailId = null

@@ -53,9 +53,7 @@ function renderUnreadBadges(counts = unreadCounts) {
     const el = document.getElementById(id)
     if (!el) return
     el.textContent = n > 0 ? (n > 99 ? '99+' : String(n)) : ''
-    if (id === 'unread-badge') el.style.display = n > 0 ? '' : 'none'
   }
-  set('unread-badge',     counts.total_unread)
   set('badge-allmail',    counts.total_unread)
   set('badge-important',  counts.important)
   set('badge-work',       counts.work)
@@ -189,7 +187,7 @@ async function fetchAccounts() {
   return apiFetch('/api/accounts');
 }
 
-async function fetchEmails({ category, folder, tab, important, accountId, accountIds, search, unread, dateFrom, dateTo, limit = 50, offset = 0 } = {}) {
+async function fetchEmails({ category, folder, tab, important, accountId, accountIds, search, unread, dateFrom, dateTo, labelId, limit = 50, offset = 0 } = {}) {
   const p = new URLSearchParams();
   if (category)   p.set('category', category);
   if (folder)     p.set('folder', folder);
@@ -201,6 +199,7 @@ async function fetchEmails({ category, folder, tab, important, accountId, accoun
   if (unread)     p.set('unread', '1');
   if (dateFrom)   p.set('dateFrom', dateFrom);
   if (dateTo)     p.set('dateTo', dateTo);
+  if (labelId)    p.set('labelId', labelId);
   p.set('limit', limit);
   p.set('offset', offset);
   return apiFetch('/api/emails?' + p);
@@ -264,17 +263,16 @@ async function loadLabels() {
 function renderLabelsSidebar() {
   const wrap = document.getElementById('sb-labels-section')
   if (!wrap) return
-  if (userLabels.length === 0) { wrap.style.display = 'none'; return }
-  wrap.style.display = ''
   const list = document.getElementById('sb-labels-list')
   if (!list) return
   list.innerHTML = userLabels.map(l => `
     <div class="sb-item sb-label-item${currentLabelId === l.id ? ' active' : ''}"
          onclick="setLabelFolder('${l.id}', this)"
          data-label-id="${l.id}">
-      <span class="sb-label-dot" style="background:${escHtml(l.color)}"></span>
-      <span class="sb-label-name">${escHtml(l.name)}</span>
+      <span class="sb-label-dot" style="background:${escHtml(l.color)};width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block"></span>
+      <span class="sb-label-name" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(l.name)}</span>
       ${l.count > 0 ? `<span class="sb-badge">${l.count}</span>` : ''}
+      <button class="sb-label-menu-btn" onclick="openLabelMenu(event,'${l.id}')" title="Label options">⋯</button>
     </div>
   `).join('')
 }
@@ -791,21 +789,32 @@ function renderEmailDetail(email) {
     const baseStyle = `
       html,body{margin:0;padding:0}
       body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
-           font-size:14px;line-height:1.65;color:#3d3530;overflow-x:hidden}
+           font-size:14px;line-height:1.65;color:#3d3530}
       img{max-width:100%!important;height:auto!important}
       table{max-width:100%!important}
       a{color:#e8402a}
-      *{box-sizing:border-box}
     `;
+    // <base target="_blank"> makes every link open in a new browser tab instead
+    // of navigating inside the sandboxed iframe (which causes X-Frame-Options errors)
     iframe.srcdoc = `<!DOCTYPE html><html><head><meta charset="UTF-8">
       <meta name="viewport" content="width=device-width,initial-scale=1">
+      <base target="_blank">
       <style>${baseStyle}</style></head><body>${email.body}</body></html>`;
     bodyEl.appendChild(iframe);
-    // Auto-size iframe height to its content so the outer .ed-body scrolls (not the iframe)
+    iframe.style.overflow = 'hidden';
+    // Auto-size iframe to full content height. For wide fixed-width emails
+    // (e.g. Steam) scale the body down using zoom so it fits without any
+    // horizontal or inner vertical scroll.
     iframe.addEventListener('load', () => {
       try {
-        const h = iframe.contentDocument.documentElement.scrollHeight;
-        iframe.style.height = Math.max(h, 200) + 'px';
+        const doc = iframe.contentDocument
+        const scrollW = doc.documentElement.scrollWidth
+        const clientW = iframe.clientWidth
+        if (scrollW > clientW && clientW > 0) {
+          doc.body.style.zoom = String(clientW / scrollW)
+        }
+        doc.body.style.overflowX = 'hidden'
+        iframe.style.height = Math.max(doc.documentElement.scrollHeight, 200) + 'px'
       } catch(e) {}
     });
   } else if (email.snippet) {
@@ -1220,6 +1229,13 @@ async function handleNotifToggle(enabled) {
   if (offLabel) offLabel.style.display = enabled ? 'none' : ''
 }
 
+function openAddAccountModal() {
+  document.getElementById('add-account-modal').classList.add('open')
+}
+function closeAddAccountModal() {
+  document.getElementById('add-account-modal').classList.remove('open')
+}
+
 function openSettings() {
   document.getElementById('profile-dropdown').classList.remove('open');
   renderSettingsAccounts();
@@ -1350,12 +1366,13 @@ function renderSettingsAccounts() {
 // ── CONFIRM MODAL ─────────────────────────────────────────────────────────────
 let _confirmedAction = null;
 
-function openConfirm(message, action, { simple = false } = {}) {
+function openConfirm(message, action, { simple = false, confirmLabel = 'Delete' } = {}) {
   _confirmedAction = action;
   document.getElementById('confirm-message').innerHTML = message;
   const typeLabel = document.getElementById('confirm-type-label');
   const input = document.getElementById('confirm-input');
   const submit = document.getElementById('confirm-submit');
+  submit.textContent = confirmLabel;
   if (simple) {
     typeLabel.style.display = 'none';
     input.style.display = 'none';
@@ -1398,7 +1415,7 @@ async function runConfirmedAction() {
 
 function confirmResync(accountId, label) {
   openConfirm(
-    `This will delete all synced emails for <strong>${escHtml(label)}</strong> and re-fetch everything on the next sync. Your actual email account is not affected.`,
+    `This will delete all synced emails for <strong>${escHtml(label)}</strong> and re-fetch everything. Your actual email account is not affected.`,
     async () => {
       closeConfirm();
       showProgress('Deleting emails…', `Clearing data for ${label}`);
@@ -1412,7 +1429,8 @@ function confirmResync(accountId, label) {
       } finally {
         hideProgress();
       }
-    }
+    },
+    { simple: true, confirmLabel: 'Re-sync' }
   );
 }
 
@@ -1489,6 +1507,108 @@ async function promptNewLabel() {
     showToast('Could not create label: ' + (e?.message || 'Unknown error'))
   }
 }
+
+// ── LABEL CONTEXT MENU ───────────────────────────────────────────────────────
+let _activeLabelMenuId = null
+
+function openLabelMenu(e, labelId) {
+  e.stopPropagation()
+  _activeLabelMenuId = labelId
+  const popup = document.getElementById('label-popup')
+  popup.classList.add('open')
+  // Position below the button
+  const rect = e.currentTarget.getBoundingClientRect()
+  const popupW = 160
+  let left = rect.left
+  if (left + popupW > window.innerWidth - 8) left = rect.right - popupW
+  popup.style.left = left + 'px'
+  popup.style.top = (rect.bottom + 4) + 'px'
+}
+
+function closeLabelMenu() {
+  document.getElementById('label-popup').classList.remove('open')
+  _activeLabelMenuId = null
+}
+
+function labelMenuAction(action) {
+  const labelId = _activeLabelMenuId
+  closeLabelMenu()
+  if (!labelId) return
+  const label = userLabels.find(l => l.id === labelId)
+  if (!label) return
+
+  if (action === 'rename') {
+    openLabelRename(label)
+  } else if (action === 'delete') {
+    openLabelDelete(label)
+  }
+}
+
+// ── LABEL RENAME MODAL ────────────────────────────────────────────────────────
+let _renameLabelId = null
+
+function openLabelRename(label) {
+  _renameLabelId = label.id
+  const input = document.getElementById('label-rename-input')
+  input.value = label.name
+  document.getElementById('label-rename-save').disabled = false
+  document.getElementById('label-rename-modal').classList.add('open')
+  setTimeout(() => { input.select() }, 50)
+}
+
+function closeLabelRename() {
+  document.getElementById('label-rename-modal').classList.remove('open')
+  _renameLabelId = null
+}
+
+async function submitLabelRename() {
+  const labelId = _renameLabelId
+  const newName = document.getElementById('label-rename-input').value.trim()
+  if (!newName || !labelId) return
+  closeLabelRename()
+  try {
+    await apiFetch(`/api/labels/${labelId}`, { method: 'PATCH', body: JSON.stringify({ name: newName }) })
+    await loadLabels()
+    if (currentLabelId === labelId) {
+      document.getElementById('folder-title').textContent = newName
+    }
+  } catch (e) {
+    showToast('Could not rename label: ' + (e?.message || 'Unknown error'))
+  }
+}
+
+// ── LABEL DELETE MODAL ────────────────────────────────────────────────────────
+let _deleteLabelId = null
+
+function openLabelDelete(label) {
+  _deleteLabelId = label.id
+  document.getElementById('label-delete-name').textContent = label.name
+  document.getElementById('label-delete-modal').classList.add('open')
+}
+
+function closeLabelDelete() {
+  document.getElementById('label-delete-modal').classList.remove('open')
+  _deleteLabelId = null
+}
+
+async function submitLabelDelete() {
+  const labelId = _deleteLabelId
+  if (!labelId) return
+  closeLabelDelete()
+  try {
+    await apiFetch(`/api/labels/${labelId}`, { method: 'DELETE' })
+    if (currentLabelId === labelId) {
+      currentLabelId = null
+      setFolder('allmail', document.getElementById('folder-allmail'))
+    }
+    await loadLabels()
+  } catch (e) {
+    showToast('Could not delete label: ' + (e?.message || 'Unknown error'))
+  }
+}
+
+// Close label menu on outside click
+document.addEventListener('click', () => closeLabelMenu())
 
 // Silently syncs every 60 seconds and refreshes the email list if new emails
 // were added. Uses Gmail History API on the backend so it's cheap (1 API call

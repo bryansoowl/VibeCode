@@ -57,7 +57,7 @@ accountsRouter.delete('/:id/emails', (req, res) => {
     .get(req.params.id, user.id)
   if (!account) return res.status(404).json({ error: 'Account not found' })
   db.prepare('DELETE FROM emails WHERE account_id = ?').run(req.params.id)
-  db.prepare('UPDATE accounts SET last_synced = NULL WHERE id = ?').run(req.params.id)
+  db.prepare('UPDATE accounts SET last_synced = NULL, gmail_history_id = NULL WHERE id = ?').run(req.params.id)
   res.json({ ok: true })
 })
 

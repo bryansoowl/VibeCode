@@ -7,6 +7,7 @@ import { lhdnParser } from './lhdn'
 import { mysejahteraParser } from './mysejahtera'
 import { shopeeParser } from './shopee'
 import { lazadaParser } from './lazada'
+import { steamParser } from './steam'
 import { genericBillParser } from './generic-bill'
 import type { Parser, ParseResult } from './types'
 import type { NormalizedEmail } from '../email/types'
@@ -20,6 +21,7 @@ const PARSERS: Parser[] = [
   mysejahteraParser,
   shopeeParser,
   lazadaParser,
+  steamParser,
   genericBillParser,
 ]
 
