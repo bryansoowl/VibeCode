@@ -37,23 +37,44 @@ document.addEventListener('click', e => {
 // ── CONFIG ──────────────────────────────────────────────────────────────────
 const API = '';  // same-origin: Express serves frontend at localhost:3001
 
-// ── UNREAD BADGE ─────────────────────────────────────────────────────────────
-let unreadCount = 0
-
-async function refreshUnreadCount() {
-  try {
-    const data = await apiFetch('/api/emails/unread-count')
-    unreadCount = data.count
-    renderUnreadBadge()
-  } catch { /* silent — badge stays at last known value */ }
+// ── UNREAD BADGES ─────────────────────────────────────────────────────────────
+let unreadCounts = {
+  total_unread: 0,
+  bills: 0, govt: 0, receipts: 0, work: 0,
+  important: 0, promotions: 0, snoozed: 0,
+  sent: 0, draft: 0, spam: 0, archived: 0,
 }
 
-function renderUnreadBadge() {
-  const el = document.getElementById('unread-badge')
-  if (!el) return
-  if (unreadCount <= 0) { el.style.display = 'none'; return }
-  el.textContent = unreadCount > 99 ? '99+' : String(unreadCount)
-  el.style.display = ''
+// Tracks in-flight mark-read requests — prevents optimistic update races
+const pendingReadRequests = new Map()  // emailId → boolean (target is_read)
+
+function renderUnreadBadges(counts = unreadCounts) {
+  const set = (id, n) => {
+    const el = document.getElementById(id)
+    if (!el) return
+    el.textContent = n > 0 ? (n > 99 ? '99+' : String(n)) : ''
+    if (id === 'unread-badge') el.style.display = n > 0 ? '' : 'none'
+  }
+  set('unread-badge',     counts.total_unread)
+  set('badge-bills',      counts.bills)
+  set('badge-govt',       counts.govt)
+  set('badge-receipts',   counts.receipts)
+  set('badge-work',       counts.work)
+  set('badge-important',  counts.important)
+  set('badge-promotions', counts.promotions)
+  set('badge-snoozed',    counts.snoozed)
+  set('badge-sent',       counts.sent)
+  set('badge-draft',      counts.draft)
+  set('badge-spam',       counts.spam)
+  set('badge-archived',   counts.archived)
+}
+
+async function refreshUnreadCounts() {
+  try {
+    const data = await apiFetch('/api/emails/unread-counts')
+    unreadCounts = data
+    renderUnreadBadges()
+  } catch { /* silent — stale counts better than broken UI */ }
 }
 
 // ── EMAIL NOTIFICATIONS (Web Notifications API) ──────────────────────────────
@@ -1048,40 +1069,6 @@ function renderBillsPanel(bills, orders = []) {
   document.getElementById('bills-overdue-count').textContent = String(overdueCount);
 }
 
-// ── CATEGORY BADGES ───────────────────────────────────────────────────────────
-async function loadCategoryBadges() {
-  try {
-    const [inboxUnread, bills, govt, receipts, work, important, promotions, sent, draft, spam] = await Promise.all([
-      fetchEmails({ folder: 'inbox',   unread: true, limit: 1, offset: 0 }),  // inbox unread (excl. promos)
-      fetchEmails({ category: 'bill',    unread: true, limit: 1, offset: 0 }),
-      fetchEmails({ category: 'govt',    unread: true, limit: 1, offset: 0 }),
-      fetchEmails({ category: 'receipt', unread: true, limit: 1, offset: 0 }),
-      fetchEmails({ category: 'work',    unread: true, limit: 1, offset: 0 }),
-      fetchEmails({ important: '1',                 limit: 1, offset: 0 }),
-      fetchEmails({ tab: 'promotions',              limit: 1, offset: 0 }),
-      fetchEmails({ folder: 'sent',                 limit: 1, offset: 0 }),
-      fetchEmails({ folder: 'draft',                limit: 1, offset: 0 }),
-      fetchEmails({ folder: 'spam',                 limit: 1, offset: 0 }),
-    ]);
-    const set = (id, n) => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = n > 0 ? String(n) : '';
-    };
-    set('badge-inbox',      inboxUnread.total ?? 0);
-    set('badge-bills',      bills.total       ?? 0);
-    set('badge-govt',       govt.total        ?? 0);
-    set('badge-receipts',   receipts.total    ?? 0);
-    set('badge-work',       work.total        ?? 0);
-    set('badge-important',  important.total   ?? 0);
-    set('badge-promotions', promotions.total  ?? 0);
-    set('badge-sent',       sent.total        ?? 0);
-    set('badge-draft',      draft.total       ?? 0);
-    set('badge-spam',       spam.total        ?? 0);
-    // All Mail badge: total across every folder (no badge shown — count is just informational)
-    // Intentionally not setting badge-allmail to avoid a huge unmanageable number
-  } catch { /* badges are non-critical */ }
-}
-
 // ── PROGRESS OVERLAY ──────────────────────────────────────────────────────────
 function showProgress(msg, sub) {
   document.getElementById('progress-msg').textContent = msg || 'Working…';
@@ -1449,14 +1436,6 @@ async function refreshFocusedBadge() {
   try {
     const data = await apiFetch('/api/emails?folder=inbox&tab=primary&unread=1&limit=1')
     const el = document.getElementById('badge-focused')
-    if (el) el.textContent = data.total > 0 ? (data.total > 99 ? '99+' : data.total) : ''
-  } catch { /* silent */ }
-}
-
-async function refreshSnoozedBadge() {
-  try {
-    const data = await apiFetch('/api/emails?snoozed=1&limit=1')
-    const el = document.getElementById('badge-snoozed')
     if (el) el.textContent = data.total > 0 ? (data.total > 99 ? '99+' : data.total) : ''
   } catch { /* silent */ }
 }
