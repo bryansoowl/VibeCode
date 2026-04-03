@@ -77,6 +77,66 @@ async function refreshUnreadCounts() {
   } catch { /* silent — stale counts better than broken UI */ }
 }
 
+async function markEmailRead(emailId, isRead) {
+  // Find email in cache
+  const email = emailCache.find(e => e.id === emailId)
+  if (!email) return
+  if (email.is_read === isRead) return  // already in target state
+
+  // Rapid-click guard: if same target already in flight, skip duplicate
+  if (pendingReadRequests.has(emailId) && pendingReadRequests.get(emailId) === isRead) return
+
+  const delta = isRead ? -1 : +1
+  const prev = email.is_read  // save for revert
+
+  // ── Optimistic update ──────────────────────────────────────────────────────
+  email.is_read = isRead
+  const rowEl = document.getElementById('row-' + emailId)
+  if (rowEl) {
+    const updated = renderEmailRow(email)
+    rowEl.replaceWith(updated)
+  }
+
+  const optimistic = { ...unreadCounts }
+  optimistic.total_unread = Math.max(0, optimistic.total_unread + delta)
+  if (email.category === 'bill')    optimistic.bills      = Math.max(0, optimistic.bills      + delta)
+  if (email.category === 'govt')    optimistic.govt       = Math.max(0, optimistic.govt       + delta)
+  if (email.category === 'receipt') optimistic.receipts   = Math.max(0, optimistic.receipts   + delta)
+  if (email.category === 'work')    optimistic.work       = Math.max(0, optimistic.work       + delta)
+  if (email.is_important)           optimistic.important  = Math.max(0, optimistic.important  + delta)
+  if (email.tab === 'promotions')   optimistic.promotions = Math.max(0, optimistic.promotions + delta)
+  if (email.folder === 'sent')      optimistic.sent       = Math.max(0, optimistic.sent       + delta)
+  if (email.folder === 'draft')     optimistic.draft      = Math.max(0, optimistic.draft      + delta)
+  if (email.folder === 'spam')      optimistic.spam       = Math.max(0, optimistic.spam       + delta)
+  if (email.folder === 'archive')   optimistic.archived   = Math.max(0, optimistic.archived   + delta)
+  renderUnreadBadges(optimistic)
+
+  pendingReadRequests.set(emailId, isRead)
+
+  // ── API call ───────────────────────────────────────────────────────────────
+  try {
+    const result = await apiFetch(`/api/emails/${emailId}/read`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_read: isRead }),
+    })
+    // Reconcile with authoritative counts from server
+    unreadCounts = result.counts
+    renderUnreadBadges()
+  } catch (err) {
+    // Revert optimistic update
+    email.is_read = prev
+    const revertEl = document.getElementById('row-' + emailId)
+    if (revertEl) {
+      const reverted = renderEmailRow(email)
+      revertEl.replaceWith(reverted)
+    }
+    refreshUnreadCounts()
+    showToast('Failed to update read status')
+  } finally {
+    pendingReadRequests.delete(emailId)
+  }
+}
+
 // ── EMAIL NOTIFICATIONS (Web Notifications API) ──────────────────────────────
 // In-memory set — deduplicates within the current session.
 const _notifiedEmailIds = new Set()
@@ -151,9 +211,6 @@ async function fetchEmail(id) {
   return apiFetch('/api/emails/' + id);
 }
 
-async function markRead(id) {
-  return apiFetch('/api/emails/' + id + '/read', { method: 'PATCH' });
-}
 
 async function fetchBills(status) {
   const p = new URLSearchParams();
@@ -674,40 +731,9 @@ async function selectEmail(id) {
     const email = await fetchEmail(id);
     renderEmailDetail(email);
 
-    // Mark read (fire & forget — don't block UI)
+    // Mark read via unified function (optimistic + server reconcile)
     if (!email.is_read) {
-      markRead(id).catch(() => {});
-      // Update row UI
-      if (row) {
-        row.classList.remove('unread');
-        const dot = row.querySelector('.er-unread-dot');
-        if (dot) dot.remove();
-        const fromEl = row.querySelector('.er-from');
-        if (fromEl) fromEl.style.fontWeight = '500';
-      }
-      // Update cache
-      const cached = emailCache.find(e => e.id === id);
-      if (cached) cached.is_read = true;
-      // Decrement inbox unread badge
-      const badge = document.getElementById('badge-inbox');
-      if (badge) {
-        const curr = parseInt(badge.textContent) || 0;
-        if (curr > 1) badge.textContent = String(curr - 1);
-        else badge.textContent = '';
-      }
-      // Decrement the relevant category badge
-      const catBadgeMap = { bill: 'badge-bills', govt: 'badge-govt', receipt: 'badge-receipts', work: 'badge-work' };
-      const catBadgeId = catBadgeMap[email.category];
-      if (catBadgeId) {
-        const catBadge = document.getElementById(catBadgeId);
-        if (catBadge) {
-          const curr = parseInt(catBadge.textContent) || 0;
-          if (curr > 1) catBadge.textContent = String(curr - 1);
-          else catBadge.textContent = '';
-        }
-      }
-      unreadCount = Math.max(0, unreadCount - 1)
-      renderUnreadBadge()
+      markEmailRead(id, true)
     }
   } catch (err) {
     document.getElementById('ed-subject').textContent = 'Failed to load email';
