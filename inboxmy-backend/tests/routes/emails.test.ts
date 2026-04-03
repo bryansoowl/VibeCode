@@ -486,7 +486,7 @@ describe('PATCH /api/emails/:id/read', () => {
     const acctId = seedAccount(userId)
     const { emailId } = seedEmail(userId, { accountId: acctId, isRead: false })
 
-    const res = await agent.patch(`/api/emails/${emailId}/read`)
+    const res = await agent.patch(`/api/emails/${emailId}/read`).send({ is_read: true })
     expect(res.status).toBe(200)
     expect(res.body.ok).toBe(true)
 
@@ -499,7 +499,7 @@ describe('PATCH /api/emails/:id/read', () => {
     const acctId = seedAccount(userId)
     const { emailId } = seedEmail(userId, { accountId: acctId, isRead: true })
 
-    const res = await agent.patch(`/api/emails/${emailId}/read`)
+    const res = await agent.patch(`/api/emails/${emailId}/read`).send({ is_read: true })
     expect(res.status).toBe(200)
     expect(res.body.ok).toBe(true)
   })
@@ -511,11 +511,47 @@ describe('PATCH /api/emails/:id/read', () => {
     const { emailId } = seedEmail(userId1, { accountId: acctId, isRead: false })
 
     // Should return 200 (no error), but the row should not have changed
-    const res = await agent2.patch(`/api/emails/${emailId}/read`)
+    const res = await agent2.patch(`/api/emails/${emailId}/read`).send({ is_read: true })
     expect(res.status).toBe(200)
 
     const row = getDb().prepare('SELECT is_read FROM emails WHERE id = ?').get(emailId) as any
     expect(row.is_read).toBe(0) // still unread
+  })
+
+  it('returns counts in response body', async () => {
+    const { agent, id: userId } = await createTestUser()
+    seedEmail(userId, { isRead: false, folder: 'inbox', tab: 'primary' })
+    const { emailId } = seedEmail(userId, { isRead: false, folder: 'inbox', tab: 'primary' })
+
+    const res = await agent.patch(`/api/emails/${emailId}/read`).send({ is_read: true })
+
+    expect(res.status).toBe(200)
+    expect(res.body.ok).toBe(true)
+    expect(res.body.counts).toBeDefined()
+    expect(typeof res.body.counts.total_unread).toBe('number')
+    // After marking one of two unread emails as read, total_unread should be 1
+    expect(res.body.counts.total_unread).toBe(1)
+  })
+
+  it('marks email as unread when is_read: false', async () => {
+    const { agent, id: userId } = await createTestUser()
+    const { emailId } = seedEmail(userId, { isRead: true, folder: 'inbox' })
+
+    const res = await agent.patch(`/api/emails/${emailId}/read`).send({ is_read: false })
+
+    expect(res.status).toBe(200)
+    expect(res.body.counts.total_unread).toBe(1)
+    const row = getDb().prepare('SELECT is_read FROM emails WHERE id = ?').get(emailId) as any
+    expect(row.is_read).toBe(0)
+  })
+
+  it('returns 400 when body is missing is_read', async () => {
+    const { agent, id: userId } = await createTestUser()
+    const { emailId } = seedEmail(userId, { isRead: false })
+
+    const res = await agent.patch(`/api/emails/${emailId}/read`).send({})
+
+    expect(res.status).toBe(400)
   })
 })
 

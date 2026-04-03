@@ -218,18 +218,20 @@ emailsRouter.delete('/', (req: Request, res: Response) => {
   res.json({ ok: true })
 })
 
-const readBody = z.object({ read: z.boolean().optional() })
+const readBody = z.object({ is_read: z.boolean() })
 
 emailsRouter.patch('/:id/read', (req: Request, res: Response) => {
   const parsed = readBody.safeParse(req.body)
-  const isRead = parsed.success && parsed.data.read === false ? 0 : 1
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+
   const user = (req as any).user
   const db = getDb()
   db.prepare(`
     UPDATE emails SET is_read = ?
     WHERE id = ? AND account_id IN (SELECT id FROM accounts WHERE user_id = ?)
-  `).run(isRead, req.params.id, user.id)
-  res.json({ ok: true })
+  `).run(parsed.data.is_read ? 1 : 0, req.params.id, user.id)
+
+  res.json({ ok: true, counts: computeUnreadCounts(db, user.id) })
 })
 
 const folderBody = z.object({
