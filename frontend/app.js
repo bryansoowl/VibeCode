@@ -1199,19 +1199,12 @@ async function doSync() {
 
 // ── SETTINGS MODAL ───────────────────────────────────────────────────────────
 function _setGeminiKeyUI(hasKey) {
-  const banner   = document.getElementById('gemini-saved-banner')
-  const keyField = document.getElementById('gemini-key-field')
-  const testRow  = document.getElementById('gemini-test-row')
-  if (hasKey) {
-    if (banner)   { banner.style.display = 'flex' }
-    if (keyField) { keyField.style.display = 'none' }
-    if (testRow)  { testRow.style.display = '' }
-    if (typeof refreshIcons === 'function') refreshIcons()
-  } else {
-    if (banner)   { banner.style.display = 'none' }
-    if (keyField) { keyField.style.display = '' }
-    if (testRow)  { testRow.style.display = 'none' }
-  }
+  const banner  = document.getElementById('gemini-saved-banner')
+  const testRow = document.getElementById('gemini-test-row')
+  // Key input is always visible — user can paste a new key at any time
+  if (banner)  banner.style.display  = hasKey ? 'flex' : 'none'
+  if (testRow) testRow.style.display = hasKey ? ''     : 'none'
+  if (hasKey && typeof refreshIcons === 'function') refreshIcons()
 }
 
 async function loadAISettings() {
