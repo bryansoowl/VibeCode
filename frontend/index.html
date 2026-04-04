@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>InboxMY — Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script defer src="https://cdn.jsdelivr.net/npm/lucide@0.446.0/dist/umd/lucide.min.js"></script>
 <style>
 :root {
   --cream:#faf8f3; --cream2:#f3f0e8; --cream3:#ebe7db;
@@ -367,6 +368,157 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
   min-width: 180px; padding: 4px 0; z-index: 10000;
 }
 .ctx-has-sub:hover .ctx-submenu { display: block; }
+
+/* ════════════════════════════════════════════════════════════════════════
+   BEAUTIFICATION — polished menus, modals, animations
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Menu entrance animation */
+@keyframes menuPop {
+  from { opacity:0; transform:scale(.95) translateY(-6px) }
+  to   { opacity:1; transform:scale(1)   translateY(0) }
+}
+
+/* Context menu — refined */
+#ctx-menu {
+  animation: menuPop .14s cubic-bezier(.2,.8,.4,1);
+  background: #fff;
+  border-radius: 11px;
+  padding: 5px 0;
+  font-size: 13px;
+  box-shadow: 0 14px 40px rgba(26,22,18,.16), 0 2px 8px rgba(26,22,18,.08);
+  border: 1px solid rgba(26,22,18,.1);
+}
+.ctx-item {
+  padding: 7px 12px 7px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 7px;
+  margin: 0 4px;
+  color: var(--ink2);
+  font-size: 13px;
+  transition: background .1s, color .1s;
+}
+.ctx-item:hover { background: var(--cream2); color: var(--ink); }
+.ctx-item.danger,
+.ctx-item[onclick*="delete"],
+.ctx-item[onclick*="trash"] { color: var(--coral); }
+.ctx-item.danger:hover,
+.ctx-item[onclick*="delete"]:hover,
+.ctx-item[onclick*="trash"]:hover { background: var(--coral-bg); color: var(--coral); }
+.ctx-divider { height: 1px; background: rgba(26,22,18,.07); margin: 4px 8px; }
+
+/* Context menu submenu */
+.ctx-has-sub .ctx-submenu {
+  border-radius: 11px;
+  box-shadow: 0 14px 40px rgba(26,22,18,.16), 0 2px 8px rgba(26,22,18,.08);
+  border: 1px solid rgba(26,22,18,.1);
+  animation: menuPop .14s cubic-bezier(.2,.8,.4,1);
+  padding: 5px 0;
+  background: #fff;
+}
+
+/* Inline inputs inside submenus */
+.ctx-submenu-wrap { padding: 6px 10px 8px; }
+.ctx-inline-input {
+  width: 100%; box-sizing: border-box;
+  padding: 7px 10px; font-size: 12px;
+  font-family: var(--sans); color: var(--ink);
+  border: 1px solid var(--border); border-radius: 7px;
+  background: var(--cream); outline: none;
+  transition: border-color .15s, background .15s;
+}
+.ctx-inline-input:focus { border-color: var(--coral); background: #fff; }
+.ctx-inline-btn {
+  margin-top: 6px; width: 100%; padding: 7px;
+  border-radius: 7px; border: none;
+  background: var(--coral); color: #fff;
+  font-family: var(--sans); font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: background .15s;
+}
+.ctx-inline-btn:hover { background: var(--coral2); }
+
+/* Label sidebar popup — matches context menu */
+.sb-label-popup {
+  border-radius: 11px;
+  box-shadow: 0 14px 40px rgba(26,22,18,.16), 0 2px 8px rgba(26,22,18,.08);
+  border: 1px solid rgba(26,22,18,.1);
+  padding: 5px 0;
+  font-size: 13px;
+  min-width: 152px;
+}
+.sb-label-popup.open { animation: menuPop .14s cubic-bezier(.2,.8,.4,1); }
+.sb-label-popup .ctx-item { padding: 8px 14px 8px 10px; }
+
+/* Modal — animated overlay + scale-in box */
+@keyframes fadeBg  { from { opacity:0 } to { opacity:1 } }
+@keyframes modalIn { from { opacity:0; transform:scale(.97) translateY(8px) } to { opacity:1; transform:scale(1) translateY(0) } }
+.modal-overlay { backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.modal-overlay.open { animation: fadeBg .18s ease; }
+.modal-overlay.open .modal-box { animation: modalIn .2s cubic-bezier(.2,.8,.35,1); }
+
+/* Label color picker */
+.label-color-picker { display: flex; flex-wrap: wrap; gap: 8px; }
+.label-color-swatch {
+  width: 24px; height: 24px; border-radius: 50%;
+  cursor: pointer; border: 2.5px solid transparent;
+  box-shadow: 0 1px 4px rgba(0,0,0,.18);
+  transition: transform .15s, border-color .15s, box-shadow .15s;
+}
+.label-color-swatch:hover { transform: scale(1.18); box-shadow: 0 2px 8px rgba(0,0,0,.22); }
+.label-color-swatch.selected { border-color: var(--ink); transform: scale(1.12); box-shadow: 0 2px 10px rgba(0,0,0,.22); }
+
+/* Label new preview dot */
+#label-new-preview {
+  width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+  box-shadow: 0 1px 4px rgba(0,0,0,.2);
+  transition: background .15s;
+}
+
+/* Toast — refined pill */
+#toast {
+  border-radius: 24px;
+  padding: 10px 22px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  box-shadow: 0 6px 20px rgba(26,22,18,.22);
+}
+
+/* Sync button */
+#sync-btn:hover:not(:disabled) { background: var(--coral-bg); color: var(--coral); border-color: rgba(232,64,42,.25); }
+
+/* Filter pills — cleaner active state */
+.el-filter.active {
+  background: var(--ink);
+  color: #fff;
+  border-color: var(--ink);
+  box-shadow: 0 1px 5px rgba(26,22,18,.18);
+}
+.el-filter:hover:not(.active) { background: var(--cream3); color: var(--ink); }
+
+/* Compose window */
+#compose { border-radius: 16px; box-shadow: 0 18px 60px rgba(26,22,18,.18), 0 2px 12px rgba(26,22,18,.08); }
+
+/* Sidebar "New label" button */
+.sb-label-new { color: var(--ink3); font-size: 12px; }
+.sb-label-new:hover { color: var(--coral); }
+
+/* ── Lucide icon sizing ──────────────────────────────────────────────── */
+.sb-icon svg          { width:15px; height:15px; flex-shrink:0; }
+.ctx-item svg         { width:14px; height:14px; flex-shrink:0; }
+.pd-item svg          { width:14px; height:14px; flex-shrink:0; }
+.ed-empty-icon svg    { width:44px; height:44px; stroke-width:1.5; opacity:.3; }
+.bi-icon svg          { width:15px; height:15px; flex-shrink:0; }
+.sc-icon svg          { width:18px; height:18px; flex-shrink:0; }
+.dz-title svg         { width:13px; height:13px; flex-shrink:0; }
+.confirm-warning-icon svg { width:18px; height:18px; flex-shrink:0; }
+.cmp-extras svg       { width:16px; height:16px; flex-shrink:0; }
+.search-icon svg      { width:14px; height:14px; flex-shrink:0; }
+#sync-btn svg         { width:13px; height:13px; stroke-width:2.5; flex-shrink:0; }
+.modal-icon-lg        { display:flex; align-items:center; justify-content:center; width:44px; height:44px; background:var(--coral-bg); border-radius:10px; flex-shrink:0; }
+.modal-icon-lg svg    { width:22px; height:22px; color:var(--coral); }
+.ctx-arrow            { margin-left:auto; display:flex; align-items:center; color:var(--ink4); font-size:11px; }
 </style>
 </head>
 <body>
@@ -374,11 +526,11 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 <div id="topbar">
   <div class="tb-logo"><div class="tb-dot"></div>InboxMY</div>
   <div class="tb-search">
-    <span class="search-icon">⌕</span>
+    <span class="search-icon"><i data-lucide="search"></i></span>
     <input type="text" placeholder="Search emails, bills, receipts..." id="search-input" oninput="filterEmails(this.value)">
   </div>
   <div class="tb-right">
-    <button class="tb-lang" id="sync-btn" onclick="doSync()">↻ Sync</button>
+    <button class="tb-lang" id="sync-btn" onclick="doSync()"><i data-lucide="refresh-cw"></i> Sync</button>
     <span id="sync-status" style="font-size:11px;color:var(--ink4)"></span>
     <div class="profile-wrap">
       <div class="tb-avatar" id="tb-avatar" onclick="toggleProfileMenu()" title="Account">A</div>
@@ -387,9 +539,9 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
           <div class="pd-user-name" id="pd-user-name">Account</div>
           <div class="pd-user-email" id="pd-user-email">—</div>
         </div>
-        <div class="pd-item" onclick="openSettings()">⚙️ Settings</div>
+        <div class="pd-item" onclick="openSettings()"><i data-lucide="settings"></i> Settings</div>
         <div class="pd-sep"></div>
-        <div class="pd-item danger" onclick="handleSignOut()">↩ Sign out</div>
+        <div class="pd-item danger" onclick="handleSignOut()"><i data-lucide="log-out"></i> Sign out</div>
       </div>
     </div>
   </div>
@@ -402,57 +554,58 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
     <button class="sb-compose" onclick="openCompose()" id="compose-btn">+ Compose</button>
 
     <div class="sb-section">
-      <div class="sb-item active" onclick="setFolder('allmail', this)" id="folder-allmail">
-        <span class="sb-icon">📬</span>
+      <div class="sb-item" onclick="setFolder('allmail', this)" id="folder-allmail">
+        <span class="sb-icon"><i data-lucide="inbox"></i></span>
         <span>All Mail</span>
         <span class="sb-badge" id="badge-allmail"></span>
       </div>
-      <div class="sb-item" onclick="setFolder('important', this)" id="folder-important">
-        <span class="sb-icon">⭐</span>
+      <div class="sb-item active" onclick="setFolder('important', this)" id="folder-important">
+        <span class="sb-icon"><i data-lucide="star"></i></span>
         <span id="lbl-important">Important</span>
         <span class="sb-badge" style="background:var(--amber);color:#fff" id="badge-important"></span>
       </div>
       <div class="sb-item" onclick="setFolder('work', this)" id="folder-work">
-        <span class="sb-icon">💼</span>
+        <span class="sb-icon"><i data-lucide="briefcase"></i></span>
         <span id="lbl-work">Work</span>
         <span class="sb-badge" id="badge-work"></span>
       </div>
       <div class="sb-item" onclick="setFolder('bills', this)" id="folder-bills">
-        <span class="sb-icon">⚡</span>
+        <span class="sb-icon"><i data-lucide="zap"></i></span>
         <span id="lbl-bills">Bills</span>
         <span class="sb-badge" style="background:var(--amber);color:#fff" id="badge-bills"></span>
       </div>
       <div class="sb-item" onclick="setFolder('receipts', this)" id="folder-receipts">
-        <span class="sb-icon">🛍️</span>
+        <span class="sb-icon"><i data-lucide="shopping-bag"></i></span>
         <span id="lbl-receipts">Receipts</span>
         <span class="sb-badge grey" id="badge-receipts"></span>
       </div>
       <div class="sb-item" onclick="setFolder('govt', this)" id="folder-govt">
-        <span class="sb-icon">🏛️</span>
+        <span class="sb-icon"><i data-lucide="landmark"></i></span>
         <span id="lbl-govt">Government</span>
         <span class="sb-badge" style="background:var(--teal);color:#fff" id="badge-govt"></span>
       </div>
       <div class="sb-item" onclick="setFolder('promotions', this)" id="folder-promotions">
-        <span class="sb-icon">🏷️</span>
+        <span class="sb-icon"><i data-lucide="tag"></i></span>
         <span>Promotions</span>
         <span class="sb-badge" style="background:var(--purple);color:#fff" id="badge-promotions"></span>
       </div>
       <div class="sb-item" id="folder-snoozed" onclick="setFolder('snoozed', this)">
-        <span class="sb-icon">🕐</span> Snoozed
+        <span class="sb-icon"><i data-lucide="clock"></i></span>
+        <span>Snoozed</span>
         <span class="sb-badge" id="badge-snoozed"></span>
       </div>
       <div class="sb-item" onclick="setFolder('sent', this)" id="folder-sent">
-        <span class="sb-icon">📤</span>
+        <span class="sb-icon"><i data-lucide="send"></i></span>
         <span id="lbl-sent">Sent</span>
         <span class="sb-badge grey" id="badge-sent"></span>
       </div>
       <div class="sb-item" onclick="setFolder('draft', this)" id="folder-draft">
-        <span class="sb-icon">📝</span>
+        <span class="sb-icon"><i data-lucide="file-text"></i></span>
         <span>Drafts</span>
         <span class="sb-badge grey" id="badge-draft"></span>
       </div>
       <div class="sb-item" onclick="setFolder('spam', this)" id="folder-spam">
-        <span class="sb-icon">🚫</span>
+        <span class="sb-icon"><i data-lucide="ban"></i></span>
         <span id="lbl-spam">Spam</span>
         <span class="sb-badge grey" id="badge-spam"></span>
       </div>
@@ -487,15 +640,12 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
   <!-- EMAIL LIST -->
   <div id="email-list">
     <div class="el-header">
-      <div class="el-title" id="folder-title">All inbox</div>
+      <div class="el-title" id="folder-title">Important</div>
       <div class="el-count" id="email-count">12 emails</div>
     </div>
     <div class="el-filters">
       <div class="el-filter active" onclick="setFilter('all', this)" id="filter-all">All</div>
       <div class="el-filter" onclick="setFilter('unread', this)">Unread</div>
-      <div class="el-filter" onclick="setFilter('bills', this)">Bills</div>
-      <div class="el-filter" onclick="setFilter('govt', this)">Govt</div>
-      <div class="el-filter" onclick="setFilter('receipts', this)">Receipts</div>
     </div>
     <div class="el-items" id="el-items"></div>
     <div id="scroll-sentinel" style="height:1px"></div>
@@ -504,7 +654,7 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
   <!-- EMAIL DETAIL -->
   <div id="email-detail">
     <div class="ed-empty" id="ed-empty">
-      <div class="ed-empty-icon">✉</div>
+      <div class="ed-empty-icon"><i data-lucide="mail"></i></div>
       <div class="ed-empty-text">Select an email to read</div>
     </div>
     <div id="ed-content" style="display:none;flex-direction:column;height:100%;overflow:hidden">
@@ -585,8 +735,8 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
   <div class="cmp-footer">
     <button class="cmp-send" onclick="sendEmail()" id="lbl-send">Send</button>
     <div class="cmp-extras">
-      <span class="cmp-extra-btn" title="Attach file" onclick="showToast('Attach file coming soon!')">📎</span>
-      <span class="cmp-extra-btn" title="Discard" onclick="closeCompose()">🗑</span>
+      <span class="cmp-extra-btn" title="Attach file" onclick="showToast('Attach file coming soon!')"><i data-lucide="paperclip"></i></span>
+      <span class="cmp-extra-btn" title="Discard" onclick="closeCompose()"><i data-lucide="trash-2"></i></span>
     </div>
   </div>
 </div>
@@ -635,7 +785,7 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
       </div>
 
       <div class="danger-zone" style="margin-top:24px">
-        <div class="dz-title">⚠️ Danger zone</div>
+        <div class="dz-title"><i data-lucide="alert-triangle"></i> Danger zone</div>
         <div class="dz-desc">
           Wipe <strong>all synced email data</strong> from this device — every email and bill across all accounts.
           Your actual email accounts are not affected. The next sync will re-fetch everything.
@@ -675,7 +825,7 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
     </div>
     <div class="modal-body">
       <div class="confirm-warning">
-        <div class="confirm-warning-icon">⚠️</div>
+        <div class="confirm-warning-icon"><i data-lucide="alert-triangle"></i></div>
         <div class="confirm-warning-text" id="confirm-message">This action cannot be undone.</div>
       </div>
       <div class="confirm-type-label" id="confirm-type-label">Type <strong>DELETE</strong> to confirm</div>
@@ -719,7 +869,7 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
     </div>
     <div class="modal-body" style="padding:20px;display:flex;flex-direction:column;gap:16px">
       <div style="display:flex;gap:12px;align-items:flex-start">
-        <div style="font-size:28px;line-height:1">🗑️</div>
+        <div class="modal-icon-lg"><i data-lucide="trash-2"></i></div>
         <div>
           <div style="font-size:14px;font-weight:600;color:var(--ink);margin-bottom:4px">Delete "<span id="label-delete-name"></span>"?</div>
           <div style="font-size:13px;color:var(--ink3);line-height:1.5">The label will be removed. Your emails will not be deleted.</div>
@@ -733,11 +883,37 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
   </div>
 </div>
 
+<!-- LABEL NEW MODAL -->
+<div class="modal-overlay" id="label-new-modal" onclick="if(event.target===this)closeLabelNew()">
+  <div class="modal-box" style="width:340px">
+    <div class="modal-head">
+      <div class="modal-title">New label</div>
+      <button class="modal-close" onclick="closeLabelNew()">×</button>
+    </div>
+    <div class="modal-body" style="padding:20px;display:flex;flex-direction:column;gap:18px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <div id="label-new-preview"></div>
+        <input id="label-new-input" class="lm-input" type="text" placeholder="Label name" autocomplete="off"
+               oninput="document.getElementById('label-new-save').disabled=!this.value.trim()"
+               onkeydown="if(event.key==='Enter'&&!document.getElementById('label-new-save').disabled)submitLabelNew();if(event.key==='Escape')closeLabelNew()">
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--ink4);text-transform:uppercase;letter-spacing:.09em;margin-bottom:10px">Color</div>
+        <div id="label-new-colors" class="label-color-picker"></div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="lm-btn-cancel" onclick="closeLabelNew()">Cancel</button>
+        <button class="lm-btn-save" id="label-new-save" disabled onclick="submitLabelNew()">Create label</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- LABEL CONTEXT POPUP -->
 <div id="label-popup" class="sb-label-popup">
-  <div class="ctx-item" onclick="labelMenuAction('rename')">✏️ Rename</div>
+  <div class="ctx-item" onclick="labelMenuAction('rename')"><i data-lucide="pencil"></i> Rename</div>
   <div class="ctx-divider"></div>
-  <div class="ctx-item" style="color:var(--coral)" onclick="labelMenuAction('delete')">🗑️ Delete label</div>
+  <div class="ctx-item danger" onclick="labelMenuAction('delete')"><i data-lucide="trash-2"></i> Delete label</div>
 </div>
 
 <!-- PROGRESS OVERLAY -->
@@ -826,6 +1002,64 @@ async function sendEmail() {
   }
 }
 
+// ── ICON HELPER ──────────────────────────────────────────────────────────────
+function refreshIcons() {
+  if (typeof lucide !== 'undefined') lucide.createIcons()
+}
+
+// ── NEW LABEL MODAL ──────────────────────────────────────────────────────────
+const LABEL_COLORS = [
+  '#e8402a','#c97a1a','#0d7a6e','#5c48c9',
+  '#2a6abf','#1a8a3c','#c9487a','#7a5030',
+  '#3a8abf','#8a48c9','#3c8a1a','#c94830',
+]
+let _labelNewColor = LABEL_COLORS[0]
+
+function openLabelNew() {
+  _labelNewColor = LABEL_COLORS[0]
+  const input   = document.getElementById('label-new-input')
+  const save    = document.getElementById('label-new-save')
+  const preview = document.getElementById('label-new-preview')
+  const colorsEl = document.getElementById('label-new-colors')
+  if (input)   input.value = ''
+  if (save)    save.disabled = true
+  if (preview) preview.style.background = _labelNewColor
+  if (colorsEl) {
+    colorsEl.innerHTML = LABEL_COLORS.map(c => `
+      <div class="label-color-swatch${c === _labelNewColor ? ' selected' : ''}"
+           style="background:${c}" data-color="${c}"
+           onclick="selectLabelColor('${c}')"></div>
+    `).join('')
+  }
+  document.getElementById('label-new-modal').classList.add('open')
+  setTimeout(() => input && input.focus(), 60)
+}
+
+function closeLabelNew() {
+  document.getElementById('label-new-modal').classList.remove('open')
+}
+
+function selectLabelColor(color) {
+  _labelNewColor = color
+  const preview = document.getElementById('label-new-preview')
+  if (preview) preview.style.background = color
+  document.querySelectorAll('#label-new-colors .label-color-swatch').forEach(s => {
+    s.classList.toggle('selected', s.dataset.color === color)
+  })
+}
+
+async function submitLabelNew() {
+  const name = document.getElementById('label-new-input').value.trim()
+  if (!name) return
+  closeLabelNew()
+  try {
+    await apiFetch('/api/labels', { method: 'POST', body: JSON.stringify({ name, color: _labelNewColor }) })
+    await loadLabels()
+  } catch (e) {
+    showToast('Could not create label: ' + (e?.message || 'Unknown error'))
+  }
+}
+
 // ── TOAST ─────────────────────────────
 let toastTmr;
 function showToast(msg) {
@@ -838,16 +1072,16 @@ function showToast(msg) {
 <script src="app.js"></script>
 
 <!-- Right-click context menu -->
-<div id="ctx-menu" style="display:none;position:fixed;z-index:9999;background:#fff;border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.15);min-width:220px;padding:4px 0;font-size:13px">
-  <div class="ctx-item" id="ctx-reply"       onclick="ctxAction('reply')">↩ Reply</div>
-  <div class="ctx-item" id="ctx-reply-all"   onclick="ctxAction('reply-all')">↩↩ Reply all</div>
-  <div class="ctx-item" id="ctx-forward"     onclick="ctxAction('forward')">↪ Forward</div>
+<div id="ctx-menu" style="display:none;position:fixed;z-index:9999;min-width:220px">
+  <div class="ctx-item" id="ctx-reply"       onclick="ctxAction('reply')"><i data-lucide="reply"></i> Reply</div>
+  <div class="ctx-item" id="ctx-reply-all"   onclick="ctxAction('reply-all')"><i data-lucide="reply-all"></i> Reply all</div>
+  <div class="ctx-item" id="ctx-forward"     onclick="ctxAction('forward')"><i data-lucide="forward"></i> Forward</div>
   <div class="ctx-divider"></div>
-  <div class="ctx-item" id="ctx-archive"     onclick="ctxAction('archive')">⬚ Archive</div>
-  <div class="ctx-item" id="ctx-delete"      onclick="ctxAction('delete')">🗑 Delete</div>
-  <div class="ctx-item" id="ctx-mark-read"   onclick="ctxAction('mark-read')">✉ Mark as read</div>
-  <div class="ctx-item" id="ctx-mark-unread" onclick="ctxAction('mark-unread')">✉ Mark as unread</div>
-  <div class="ctx-item ctx-has-sub" id="ctx-snooze">🕐 Snooze ▶
+  <div class="ctx-item" id="ctx-archive"     onclick="ctxAction('archive')"><i data-lucide="archive"></i> Archive</div>
+  <div class="ctx-item" id="ctx-delete"      onclick="ctxAction('delete')"><i data-lucide="trash-2"></i> Delete</div>
+  <div class="ctx-item" id="ctx-mark-read"   onclick="ctxAction('mark-read')"><i data-lucide="mail-open"></i> Mark as read</div>
+  <div class="ctx-item" id="ctx-mark-unread" onclick="ctxAction('mark-unread')"><i data-lucide="mail"></i> Mark as unread</div>
+  <div class="ctx-item ctx-has-sub" id="ctx-snooze"><i data-lucide="clock"></i> Snooze <span class="ctx-arrow">›</span>
     <div class="ctx-submenu" id="ctx-snooze-sub">
       <div class="ctx-item" onclick="ctxSnoozePreset('later-today')">Later today</div>
       <div class="ctx-item" onclick="ctxSnoozePreset('tomorrow')">Tomorrow (9:00 AM)</div>
@@ -855,14 +1089,14 @@ function showToast(msg) {
       <div class="ctx-item" onclick="ctxSnoozePreset('next-week')">Next week (Mon 9:00 AM)</div>
       <div class="ctx-divider"></div>
       <div class="ctx-item" onclick="ctxSnoozeCustom()">Custom date/time…</div>
-      <div id="ctx-snooze-custom-wrap" style="display:none;padding:6px 12px">
-        <input type="datetime-local" id="ctx-snooze-datetime" style="width:100%;font-size:12px">
-        <button onclick="ctxSnoozeApplyCustom()" style="margin-top:4px;width:100%">Snooze</button>
+      <div id="ctx-snooze-custom-wrap" class="ctx-submenu-wrap" style="display:none">
+        <input type="datetime-local" id="ctx-snooze-datetime" class="ctx-inline-input">
+        <button class="ctx-inline-btn" onclick="ctxSnoozeApplyCustom()">Snooze</button>
       </div>
     </div>
   </div>
   <div class="ctx-divider"></div>
-  <div class="ctx-item ctx-has-sub" id="ctx-moveto">📁 Move to ▶
+  <div class="ctx-item ctx-has-sub" id="ctx-moveto"><i data-lucide="folder"></i> Move to <span class="ctx-arrow">›</span>
     <div class="ctx-submenu" id="ctx-moveto-sub">
       <div class="ctx-item" onclick="ctxMoveTo('inbox')">Inbox</div>
       <div class="ctx-item" onclick="ctxMoveTo('sent')">Sent</div>
@@ -872,19 +1106,19 @@ function showToast(msg) {
       <div class="ctx-item" onclick="ctxMoveTo('archive')">Archive</div>
     </div>
   </div>
-  <div class="ctx-item ctx-has-sub" id="ctx-labelAs">🏷 Label as ▶
+  <div class="ctx-item ctx-has-sub" id="ctx-labelAs"><i data-lucide="tag"></i> Label as <span class="ctx-arrow">›</span>
     <div class="ctx-submenu" id="ctx-labelAs-sub">
       <div id="ctx-labels-list"></div>
       <div class="ctx-divider"></div>
       <div class="ctx-item" onclick="ctxNewLabel()">＋ New label…</div>
-      <div id="ctx-new-label-wrap" style="display:none;padding:6px 12px">
-        <input type="text" id="ctx-new-label-input" placeholder="Label name" style="width:100%;font-size:12px">
-        <button onclick="ctxCreateAndAssignLabel()" style="margin-top:4px;width:100%">Create &amp; assign</button>
+      <div id="ctx-new-label-wrap" class="ctx-submenu-wrap" style="display:none">
+        <input type="text" id="ctx-new-label-input" class="ctx-inline-input" placeholder="Label name">
+        <button class="ctx-inline-btn" onclick="ctxCreateAndAssignLabel()">Create &amp; assign</button>
       </div>
     </div>
   </div>
   <div class="ctx-divider"></div>
-  <div class="ctx-item" id="ctx-find-sender" onclick="ctxAction('find-sender')">🔍 Find emails from</div>
+  <div class="ctx-item" id="ctx-find-sender" onclick="ctxAction('find-sender')"><i data-lucide="search"></i> Find emails from</div>
 </div>
 </body>
 </html>

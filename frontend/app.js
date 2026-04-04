@@ -236,7 +236,7 @@ async function triggerSync(accountId) {
 }
 
 // ── STATE ────────────────────────────────────────────────────────────────────
-let currentFolder = 'allmail';
+let currentFolder = 'important';
 let currentFilter = 'all';
 let currentSearch = '';
 let currentAccountId = null;
@@ -257,6 +257,12 @@ async function loadLabels() {
   try {
     userLabels = await apiFetch('/api/labels')
     renderLabelsSidebar()
+    // If the restored folder is a label, set the correct title now that we have labels
+    if (currentFolder === 'label' && currentLabelId) {
+      const label = userLabels.find(l => l.id === currentLabelId)
+      const titleEl = document.getElementById('folder-title')
+      if (label && titleEl) titleEl.textContent = label.name
+    }
   } catch { /* silent */ }
 }
 
@@ -269,24 +275,26 @@ function renderLabelsSidebar() {
     <div class="sb-item sb-label-item${currentLabelId === l.id ? ' active' : ''}"
          onclick="setLabelFolder('${l.id}', this)"
          data-label-id="${l.id}">
-      <span class="sb-label-dot" style="background:${escHtml(l.color)};width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block"></span>
+      <span class="sb-label-dot" style="background:${escHtml(l.color || '#a89e94')};width:9px;height:9px;border-radius:50%;flex-shrink:0;display:inline-block;box-shadow:0 1px 3px rgba(0,0,0,.18)"></span>
       <span class="sb-label-name" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(l.name)}</span>
       ${l.count > 0 ? `<span class="sb-badge">${l.count}</span>` : ''}
       <button class="sb-label-menu-btn" onclick="openLabelMenu(event,'${l.id}')" title="Label options">⋯</button>
     </div>
   `).join('')
+  if (typeof refreshIcons === 'function') refreshIcons()
 }
 
 function setLabelFolder(labelId, el) {
   currentLabelId = labelId
-  currentFolder = 'label'
-  currentFilter = 'all'
+  currentFolder  = 'label'
+  currentFilter  = 'all'
   currentDateFrom = null
-  currentDateTo = null
+  currentDateTo   = null
   document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('active'))
   if (el) el.classList.add('active')
   const label = userLabels.find(l => l.id === labelId)
   document.getElementById('folder-title').textContent = label ? label.name : 'Label'
+  try { localStorage.setItem('inboxmy_folder', 'label'); localStorage.setItem('inboxmy_label_id', labelId); } catch {}
   loadEmails(true)
 }
 
@@ -494,8 +502,9 @@ function setFolder(f, el) {
   currentDateFrom = null;
   currentDateTo   = null;
   // currentAccountIds intentionally NOT reset — account pills persist across folders
-  currentFolder = f;
-  currentFilter = 'all';
+  currentFolder  = f;
+  currentLabelId = null;
+  currentFilter  = 'all';
   document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('active'));
   if (el) el.classList.add('active');
   const titles = {
@@ -512,6 +521,7 @@ function setFolder(f, el) {
   const customPill = document.getElementById('date-custom');
   if (customPill) customPill.textContent = 'Custom ▾';
   updateClearFiltersVisibility();
+  try { localStorage.setItem('inboxmy_folder', f); localStorage.removeItem('inboxmy_label_id'); } catch {}
   loadEmails(true);
 }
 
@@ -705,6 +715,7 @@ function showApiError(err) {
 
 async function selectEmail(id) {
   selectedEmailId = id;
+  try { localStorage.setItem('inboxmy_email_id', id); } catch {}
 
   // Highlight row immediately (optimistic)
   document.querySelectorAll('.email-row').forEach(r => r.classList.remove('selected'));
@@ -729,6 +740,14 @@ async function selectEmail(id) {
       markEmailRead(id, true)
     }
   } catch (err) {
+    // Email no longer exists — silently reset detail pane
+    if (err.status === 404 || err.status === 400) {
+      try { localStorage.removeItem('inboxmy_email_id'); } catch {}
+      selectedEmailId = null;
+      document.getElementById('ed-empty').style.display = '';
+      document.getElementById('ed-content').style.display = 'none';
+      return;
+    }
     document.getElementById('ed-subject').textContent = 'Failed to load email';
     document.getElementById('ed-body-content').innerHTML =
       `<div style="color:var(--coral);padding:8px">Error: ${escHtml(err.message)}</div>`;
@@ -858,7 +877,7 @@ function renderSmartCard(email) {
     const acct = email.account_ref || '—';
     sc.innerHTML = `<div class="smart-card">
       <div class="sc-header">
-        <div class="sc-icon">⚡</div>
+        <div class="sc-icon"><i data-lucide="zap"></i></div>
         <div>
           <div class="sc-label">${escHtml(email.biller)} — extracted by InboxMY</div>
           <div class="sc-sublabel">Account: ${escHtml(acct)}</div>
@@ -869,11 +888,12 @@ function renderSmartCard(email) {
         <div class="sc-stat"><span class="sc-val">${escHtml(due)}</span><div class="sc-key">Due date</div></div>
       </div>
     </div>`;
+    if (typeof refreshIcons === 'function') refreshIcons();
   } else if (email.category === 'receipt' && email.biller) {
     const amt = email.amount_rm != null ? 'RM' + Number(email.amount_rm).toFixed(2) : '—';
     sc.innerHTML = `<div class="smart-card">
       <div class="sc-header">
-        <div class="sc-icon">🛍️</div>
+        <div class="sc-icon"><i data-lucide="shopping-bag"></i></div>
         <div>
           <div class="sc-label">${escHtml(email.biller)} order — parsed by InboxMY</div>
           <div class="sc-sublabel">${escHtml(email.account_ref || '')}</div>
@@ -883,6 +903,7 @@ function renderSmartCard(email) {
         <div class="sc-stat"><span class="sc-val amber">${escHtml(amt)}</span><div class="sc-key">Total paid</div></div>
       </div>
     </div>`;
+    if (typeof refreshIcons === 'function') refreshIcons();
   } else {
     sc.innerHTML = '';
   }
@@ -902,7 +923,7 @@ function showReconnectPrompt() {
     'justify-content:space-between', 'gap:12px',
   ].join(';');
   banner.innerHTML = `
-    <span>⚠️ Account authentication expired. Reconnect to continue syncing.</span>
+    <span style="display:flex;align-items:center;gap:8px"><i data-lucide="alert-triangle" style="width:15px;height:15px;flex-shrink:0"></i> Account authentication expired. Reconnect to continue syncing.</span>
     <div style="display:flex;gap:8px">
       <a href="/api/accounts/connect/gmail"
          style="background:#fff;color:var(--coral);padding:4px 12px;border-radius:6px;font-weight:700;text-decoration:none;font-size:12px">
@@ -918,6 +939,7 @@ function showReconnectPrompt() {
       </button>
     </div>`;
   document.body.appendChild(banner);
+  if (typeof refreshIcons === 'function') refreshIcons();
 }
 
 // ── ACCOUNTS ─────────────────────────────────────────────────────────────────
@@ -1025,16 +1047,17 @@ async function loadBills() {
 }
 
 const BILLER_ICON = {
-  TNB: '⚡', Unifi: '📡', Celcom: '📱', Maxis: '📱', Digi: '📱',
-  'Touch n Go': '💳', LHDN: '🏛️', MySejahtera: '💉',
-  Shopee: '🛍️', Lazada: '🛍️',
+  TNB: 'zap', Unifi: 'wifi', Celcom: 'smartphone', Maxis: 'smartphone', Digi: 'smartphone',
+  'Touch n Go': 'credit-card', LHDN: 'landmark', MySejahtera: 'shield',
+  Shopee: 'shopping-bag', Lazada: 'shopping-bag',
 };
 
 function getBillerIcon(biller) {
   for (const [key, icon] of Object.entries(BILLER_ICON)) {
-    if (biller && biller.toLowerCase().includes(key.toLowerCase())) return icon;
+    if (biller && biller.toLowerCase().includes(key.toLowerCase()))
+      return `<i data-lucide="${icon}"></i>`;
   }
-  return '📄';
+  return '<i data-lucide="file-text"></i>';
 }
 
 function renderBillsPanel(bills, orders = []) {
@@ -1125,6 +1148,7 @@ function renderBillsPanel(bills, orders = []) {
 
   document.getElementById('bills-total-amt').textContent = 'RM' + total.toFixed(2);
   document.getElementById('bills-overdue-count').textContent = String(overdueCount);
+  if (typeof refreshIcons === 'function') refreshIcons();
 }
 
 // ── PROGRESS OVERLAY ──────────────────────────────────────────────────────────
@@ -1143,7 +1167,8 @@ async function doSync() {
   const status = document.getElementById('sync-status');
   if (!btn) return;
 
-  btn.textContent = '↻ Syncing…';
+  btn.innerHTML = '<i data-lucide="refresh-cw" style="width:13px;height:13px;stroke-width:2.5;animation:spin .7s linear infinite"></i> Syncing…';
+  if (typeof refreshIcons === 'function') refreshIcons();
   btn.disabled = true;
   if (status) status.textContent = '';
   showProgress('Syncing emails…', 'Fetching new messages from your accounts');
@@ -1165,7 +1190,8 @@ async function doSync() {
     showToast('Sync failed: ' + (err.message || 'Unknown error'));
     if (status) status.textContent = 'Sync failed';
   } finally {
-    btn.textContent = '↻ Sync';
+    btn.innerHTML = '<i data-lucide="refresh-cw" style="width:13px;height:13px;stroke-width:2.5"></i> Sync';
+    if (typeof refreshIcons === 'function') refreshIcons();
     btn.disabled = false;
     hideProgress();
   }
@@ -1263,7 +1289,7 @@ function renderSettingsAccounts() {
     let statusHtml;
     if (acct.token_expired === 1) {
       const url = `/api/accounts/connect/${acct.provider}`;
-      statusHtml = `<div class="mac-sync mac-auth-expired">⚠ Auth expired — <a href="${escHtml(url)}">Reconnect</a></div>`;
+      statusHtml = `<div class="mac-sync mac-auth-expired" style="display:flex;align-items:center;gap:5px"><i data-lucide="alert-triangle" style="width:12px;height:12px;flex-shrink:0"></i> Auth expired — <a href="${escHtml(url)}">Reconnect</a></div>`;
     } else if (acct.last_synced) {
       const t = new Date(acct.last_synced).toLocaleString('en-MY', {
         day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true
@@ -1361,6 +1387,7 @@ function renderSettingsAccounts() {
 
     list.appendChild(card);
   });
+  if (typeof refreshIcons === 'function') refreshIcons();
 }
 
 // ── CONFIRM MODAL ─────────────────────────────────────────────────────────────
@@ -1498,6 +1525,8 @@ if (window.inboxmy) {
 
 // ── BACKGROUND SYNC POLL ─────────────────────────────────────────────────────
 async function promptNewLabel() {
+  if (typeof openLabelNew === 'function') { openLabelNew(); return }
+  // fallback if modal not available
   const name = prompt('Label name:')
   if (!name || !name.trim()) return
   try {
@@ -1625,15 +1654,43 @@ async function backgroundSyncPoll() {
 }
 
 // ── INIT ─────────────────────────────────────────────────────────────────────
+const FOLDER_TITLES = {
+  allmail:'All Mail', important:'Important', work:'Work', bills:'Bills',
+  receipts:'Receipts', govt:'Government', promotions:'Promotions',
+  snoozed:'Snoozed', sent:'Sent', draft:'Drafts', spam:'Spam',
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   setupInfiniteScroll();
+
+  // ── Restore navigation state from previous session ────────────────────────
+  const savedFolder  = localStorage.getItem('inboxmy_folder')  || 'important';
+  const savedLabelId = localStorage.getItem('inboxmy_label_id') || null;
+  const savedEmailId = localStorage.getItem('inboxmy_email_id') || null;
+
+  currentFolder  = savedFolder;
+  currentLabelId = savedFolder === 'label' ? savedLabelId : null;
+
+  // Sync sidebar active state to restored folder
+  document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('active'));
+  const folderEl = document.getElementById('folder-' + savedFolder);
+  if (folderEl) folderEl.classList.add('active');
+  const titleEl = document.getElementById('folder-title');
+  if (titleEl) titleEl.textContent = FOLDER_TITLES[savedFolder] || 'Mail';
+  // ─────────────────────────────────────────────────────────────────────────
+
   await Promise.all([
     loadAccounts(),
     loadEmails(true),
     loadBills(),
     refreshUnreadCounts(),
   ]);
+  // loadLabels will also fix the title if savedFolder === 'label'
   loadLabels()
+  if (typeof refreshIcons === 'function') refreshIcons()
+
+  // ── Restore selected email ────────────────────────────────────────────────
+  if (savedEmailId) selectEmail(savedEmailId);
 
   // Request notification permission early so it's ready when emails arrive
   if (Notification.permission === 'default') Notification.requestPermission()
@@ -1673,7 +1730,7 @@ function openCtxMenu(e, emailId, emailData) {
 
   // Find from sender
   const senderEl = document.getElementById('ctx-find-sender')
-  if (senderEl) senderEl.textContent = `🔍 Find emails from ${emailData.sender_name || emailData.sender}`
+  if (senderEl) senderEl.textContent = `Find emails from ${emailData.sender_name || emailData.sender}`
 
   // Populate label submenu
   renderCtxLabelList()
@@ -1697,9 +1754,9 @@ function renderCtxLabelList() {
   const assignedIds = new Set(emailLabels.map(l => l.id))
   list.innerHTML = userLabels.map(l => `
     <div class="ctx-item" onclick="ctxToggleLabel('${l.id}')">
-      <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${escHtml(l.color)};margin-right:8px"></span>
-      ${escHtml(l.name)}
-      ${assignedIds.has(l.id) ? ' ✓' : ''}
+      <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${escHtml(l.color || '#a89e94')};flex-shrink:0;box-shadow:0 1px 3px rgba(0,0,0,.18)"></span>
+      <span style="flex:1">${escHtml(l.name)}</span>
+      ${assignedIds.has(l.id) ? '<span style="color:var(--teal);font-size:12px;font-weight:700">✓</span>' : ''}
     </div>
   `).join('')
 }
