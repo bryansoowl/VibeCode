@@ -1198,18 +1198,32 @@ async function doSync() {
 }
 
 // ── SETTINGS MODAL ───────────────────────────────────────────────────────────
+function _setGeminiKeyUI(hasKey) {
+  const banner   = document.getElementById('gemini-saved-banner')
+  const keyField = document.getElementById('gemini-key-field')
+  const testRow  = document.getElementById('gemini-test-row')
+  if (hasKey) {
+    if (banner)   { banner.style.display = 'flex' }
+    if (keyField) { keyField.style.display = 'none' }
+    if (testRow)  { testRow.style.display = '' }
+    if (typeof refreshIcons === 'function') refreshIcons()
+  } else {
+    if (banner)   { banner.style.display = 'none' }
+    if (keyField) { keyField.style.display = '' }
+    if (testRow)  { testRow.style.display = 'none' }
+  }
+}
+
 async function loadAISettings() {
-  // Only run if window.inboxmy is available (Electron context)
-  if (!window.inboxmy) return
+  if (!window.inboxmy) {
+    // Not in Electron — hide AI section entirely
+    const section = document.getElementById('settings-ai')
+    if (section) section.style.display = 'none'
+    return
+  }
 
   const key = await window.inboxmy.getGeminiKey()
-  const statusEl = document.getElementById('gemini-key-status')
-  if (key) {
-    // Key exists — show masked status
-    if (statusEl) { statusEl.textContent = '✓ Key saved'; statusEl.className = 'key-status saved' }
-  } else {
-    if (statusEl) { statusEl.textContent = ''; statusEl.className = 'key-status' }
-  }
+  _setGeminiKeyUI(!!key)
 
   const autoLaunch = await window.inboxmy.getAutoLaunch()
   const toggle = document.getElementById('auto-launch-toggle')
@@ -1217,20 +1231,44 @@ async function loadAISettings() {
 }
 
 async function saveGeminiKeySetting() {
-  if (!window.inboxmy) return
+  if (!window.inboxmy) { showToast('Only available in the desktop app'); return }
   const input = document.getElementById('gemini-key-input')
-  const statusEl = document.getElementById('gemini-key-status')
-  if (!input || !input.value.trim()) { showToast('Please enter a Gemini API key'); return }
+  if (!input || !input.value.trim()) { showToast('Please paste your Gemini API key'); return }
+
+  const btn = document.getElementById('gemini-key-save-btn')
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…' }
 
   const result = await window.inboxmy.saveGeminiKey(input.value.trim())
+
+  if (btn) { btn.disabled = false; btn.textContent = 'Save key' }
+
   if (result && result.ok) {
     input.value = ''
-    if (statusEl) { statusEl.textContent = '✓ Key saved'; statusEl.className = 'key-status saved' }
+    _setGeminiKeyUI(true)
     showToast('Gemini key saved!')
   } else {
-    if (statusEl) { statusEl.textContent = '✗ Failed to save'; statusEl.className = 'key-status error' }
-    showToast('Failed to save key')
+    showToast('Failed to save key — try restarting the app')
   }
+}
+
+async function clearGeminiKey() {
+  if (!window.inboxmy) return
+  // Save an empty string effectively removes the key (decrypt will fail → null)
+  await window.inboxmy.saveGeminiKey('')
+  _setGeminiKeyUI(false)
+  showToast('Gemini key removed')
+}
+
+async function testGeminiNotification() {
+  if (!window.inboxmy || !window.inboxmy.notify) {
+    showToast('Test notifications only work in the desktop app')
+    return
+  }
+  await window.inboxmy.notify(
+    'InboxMY — Test notification ✓',
+    'Your Gemini key is saved. Bill reminders will look like this.'
+  )
+  showToast('Test notification sent!')
 }
 
 async function toggleAutoLaunch(enabled) {

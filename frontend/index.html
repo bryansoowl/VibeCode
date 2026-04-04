@@ -754,32 +754,56 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 
       <!-- AI Notifications settings section -->
       <div class="settings-section" id="settings-ai">
-        <h3 class="settings-section-title">AI Notifications</h3>
-        <p class="settings-section-desc">Powered by Gemini 2.0 Flash. Your key is stored encrypted on this device only.</p>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <h3 class="settings-section-title" style="margin:0">AI Notifications</h3>
+          <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;background:var(--teal-bg);color:var(--teal);border-radius:4px;padding:2px 6px">Gemini 2.0 Flash</span>
+        </div>
+        <p class="settings-section-desc">Writes smart, contextual bill reminders as Windows toasts. Key is stored encrypted on this device only.</p>
 
-        <div class="settings-field">
-          <label for="gemini-key-input">Gemini API Key</label>
-          <div class="input-row">
-            <input type="password" id="gemini-key-input" placeholder="AIza..." autocomplete="off" />
-            <button id="gemini-key-save-btn" onclick="saveGeminiKeySetting()">Save</button>
+        <!-- Key saved status banner -->
+        <div id="gemini-saved-banner" style="display:none;align-items:center;gap:10px;background:var(--green-bg);border:1px solid rgba(26,138,60,.2);border-radius:8px;padding:10px 14px;margin-bottom:12px">
+          <i data-lucide="check-circle" style="width:16px;height:16px;color:var(--green);flex-shrink:0"></i>
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:600;color:var(--green)">Gemini key saved</div>
+            <div style="font-size:11px;color:var(--ink4);margin-top:1px">Bill reminders will use AI-written copy</div>
           </div>
-          <span id="gemini-key-status" class="key-status"></span>
+          <button onclick="clearGeminiKey()" style="background:none;border:none;font-size:11px;color:var(--ink4);cursor:pointer;padding:0;font-family:var(--sans)">Remove</button>
         </div>
 
-        <div class="settings-field" id="auto-launch-field">
-          <label>
+        <div class="settings-field" id="gemini-key-field">
+          <label for="gemini-key-input" style="font-size:12px;font-weight:600;color:var(--ink2);display:block;margin-bottom:6px">Gemini API Key</label>
+          <div style="display:flex;gap:8px">
+            <input type="password" id="gemini-key-input" placeholder="Paste your AIza… key here" autocomplete="off"
+                   style="flex:1;padding:8px 11px;border:1px solid var(--border);border-radius:8px;font-family:var(--sans);font-size:13px;color:var(--ink);outline:none;transition:border-color .15s;background:var(--cream)"
+                   onfocus="this.style.borderColor='var(--coral)'" onblur="this.style.borderColor=''"
+                   onkeydown="if(event.key==='Enter')saveGeminiKeySetting()" />
+            <button id="gemini-key-save-btn" onclick="saveGeminiKeySetting()" class="lm-btn-save" style="white-space:nowrap;border-radius:8px">Save key</button>
+          </div>
+          <div style="font-size:11px;color:var(--ink4);margin-top:6px">
+            Get a free key at <strong>aistudio.google.com</strong> → Get API key
+          </div>
+        </div>
+
+        <div id="gemini-test-row" style="display:none;margin-top:4px">
+          <button onclick="testGeminiNotification()" class="lm-btn-cancel" style="font-size:12px;display:flex;align-items:center;gap:6px">
+            <i data-lucide="bell" style="width:13px;height:13px"></i> Send test notification
+          </button>
+        </div>
+
+        <div class="settings-field" id="auto-launch-field" style="margin-top:14px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
             <input type="checkbox" id="auto-launch-toggle" onchange="toggleAutoLaunch(this.checked)" />
             Launch InboxMY at Windows startup
           </label>
         </div>
 
         <div class="settings-field" id="notif-toggle-field">
-          <label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
             <input type="checkbox" id="notif-toggle" onchange="handleNotifToggle(this.checked)" />
             Email notifications (new email toasts + sound)
           </label>
-          <div id="notif-off-label" style="display:none; color: var(--coral); font-size: 0.85rem; margin-top: 4px;">
-            Notifications are off
+          <div id="notif-off-label" style="display:none;color:var(--coral);font-size:11px;margin-top:4px;margin-left:22px">
+            Notifications are currently off
           </div>
         </div>
       </div>
