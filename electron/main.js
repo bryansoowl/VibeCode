@@ -174,34 +174,28 @@ function createTray() {
 }
 
 // ── Authenticated API helper ─────────────────────────────────────────────────
-// Makes a request to the backend carrying the renderer's session cookie.
-// net.request with session: doesn't forward cookies automatically for localhost;
-// we read them from the cookie jar and set the Cookie header manually.
-// Returns { status, body } or null on network error.
+// Runs fetch() in the renderer context so it carries session cookies naturally.
+// net.request in the main process doesn't forward localhost cookies reliably.
+// Returns { status, body } or null on error.
 async function apiRequest(path, method = 'GET', bodyObj = null) {
   if (!mainWindow || mainWindow.isDestroyed()) return null
-  const cookies = await mainWindow.webContents.session.cookies.get({ url: BACKEND_URL })
-  const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ')
-  return new Promise((resolve) => {
-    const req = net.request({ url: `${BACKEND_URL}${path}`, method })
-    if (cookieHeader) req.setHeader('Cookie', cookieHeader)
-    req.on('response', (res) => {
-      let buf = ''
-      res.on('data', (chunk) => { buf += chunk })
-      res.on('end', () => {
-        try { resolve({ status: res.statusCode, body: JSON.parse(buf) }) }
-        catch { resolve({ status: res.statusCode, body: null }) }
-      })
-    })
-    req.on('error', () => resolve(null))
-    if (bodyObj !== null) {
-      const payload = JSON.stringify(bodyObj)
-      req.setHeader('Content-Type', 'application/json')
-      req.setHeader('Content-Length', Buffer.byteLength(payload))
-      req.write(payload)
-    }
-    req.end()
-  })
+  try {
+    const opts = { method, credentials: 'include', headers: { 'Content-Type': 'application/json' } }
+    if (bodyObj !== null) opts.body = JSON.stringify(bodyObj)
+    const script = `
+      (async () => {
+        try {
+          const r = await fetch(${JSON.stringify(BACKEND_URL + path)}, ${JSON.stringify(opts)})
+          let body = null
+          try { body = await r.json() } catch {}
+          return { status: r.status, body }
+        } catch { return null }
+      })()
+    `
+    return await mainWindow.webContents.executeJavaScript(script)
+  } catch {
+    return null
+  }
 }
 
 // ── Scheduler ───────────────────────────────────────────────────────────────
