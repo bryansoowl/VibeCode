@@ -433,10 +433,7 @@ function renderEmailRow(email) {
   const time = email.received_at ? formatRelativeTime(email.received_at) : '';
 
   row.innerHTML = `
-    <div class="er-checkbox-wrap">
-      <div class="er-avatar" style="background:${color}">${initial}</div>
-      <div class="er-cb"><input type="checkbox" class="er-cb-input"${isBulkSelected ? ' checked' : ''}></div>
-    </div>
+    <div class="er-avatar" style="background:${color}">${initial}</div>
     <div class="er-body">
       <div class="er-from">${escHtml(name)}</div>
       <div class="er-subject">${escHtml(email.subject || '(no subject)')}</div>
@@ -446,10 +443,11 @@ function renderEmailRow(email) {
       <div class="er-time">${time}</div>
       ${tagHtml}
       ${isUnread ? '<div class="er-unread-dot"></div>' : ''}
-    </div>`;
+    </div>
+    <div class="er-cb"><input type="checkbox" class="er-cb-input"${isBulkSelected ? ' checked' : ''}></div>`;
 
-  // Checkbox area toggles selection; does NOT open the email
-  row.querySelector('.er-checkbox-wrap').addEventListener('click', (e) => {
+  // Checkbox (top-right overlay) toggles selection; does NOT open the email
+  row.querySelector('.er-cb').addEventListener('click', (e) => {
     e.stopPropagation();
     const idx = emailCache.findIndex(em => em.id === email.id);
     toggleEmailSelect(email.id, idx, e);
@@ -759,12 +757,18 @@ function updateBulkSelection() {
     elItems.classList.add('selection-mode');
     document.getElementById('bulk-count-label').textContent = count + ' selected';
     const allCb = document.getElementById('bulk-select-all-cb');
-    if (allCb) allCb.checked = (count === emailCache.length && !emailHasMore);
+    if (allCb) {
+      const allLoaded = emailCache.every(e => selectedEmailIds.has(e.id));
+      allCb.checked = allLoaded;
+      allCb.indeterminate = !allLoaded; // dash when partial, tick when all
+    }
   } else {
     bulkBar.classList.remove('active');
     elHeader.style.display = '';
     elItems.classList.remove('selection-mode');
     lastSelectedIndex = -1;
+    const allCb = document.getElementById('bulk-select-all-cb');
+    if (allCb) { allCb.checked = false; allCb.indeterminate = false; }
   }
 
   // Sync row classes + checkboxes
@@ -789,6 +793,17 @@ function clearBulkSelection() {
 function bulkSelectAll(checked) {
   if (checked) emailCache.forEach(e => selectedEmailIds.add(e.id));
   else selectedEmailIds.clear();
+  updateBulkSelection();
+}
+
+// onclick handler: if all selected → clear all; otherwise → select all
+function bulkSelectAllToggle(cb) {
+  const allLoaded = emailCache.every(e => selectedEmailIds.has(e.id));
+  if (allLoaded) {
+    selectedEmailIds.clear();
+  } else {
+    emailCache.forEach(e => selectedEmailIds.add(e.id));
+  }
   updateBulkSelection();
 }
 
