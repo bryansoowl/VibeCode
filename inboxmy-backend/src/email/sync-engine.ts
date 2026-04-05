@@ -59,6 +59,15 @@ export async function syncAccount(
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
 
+    const insertIndex = db.prepare(`
+      INSERT INTO inbox_index
+        (email_id, account_id, provider_message_id, thread_id,
+         sender_email, sender_name, subject_preview_enc, snippet_preview_enc,
+         received_at, folder, tab, is_read, is_important, category)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(account_id, provider_message_id) DO NOTHING
+    `)
+
     const insertBill = db.prepare(`
       INSERT INTO parsed_bills (id, email_id, biller, amount_rm, due_date, account_ref, parsed_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -97,6 +106,22 @@ export async function syncAccount(
             subject: (email.subject ?? '').slice(0, 200),
             accountId,
           })
+          insertIndex.run(
+            randomUUID(),
+            accountId,
+            email.id,
+            email.threadId ?? null,
+            email.sender,
+            email.senderName ?? null,
+            encrypt(email.subject, dataKey),
+            email.snippet ? encrypt(email.snippet, dataKey) : null,
+            email.receivedAt,
+            finalFolder,
+            finalTab,
+            email.isRead ? 1 : 0,
+            email.isImportant ? 1 : 0,
+            parsed.category ?? null
+          )
           if (parsed.bill?.amountRm != null || parsed.bill?.dueDateMs != null) {
             insertBill.run(
               randomUUID(), email.id, parsed.bill.biller,
@@ -115,6 +140,24 @@ export async function syncAccount(
     db.prepare(
       'UPDATE accounts SET last_synced = ?, token_expired = 0, gmail_history_id = COALESCE(?, gmail_history_id) WHERE id = ?'
     ).run(Date.now(), newHistoryId, accountId)
+
+    // ── Update sync_state ────────────────────────────────────────────────────
+    db.prepare(`
+      INSERT INTO sync_state (account_id, last_fast_sync_at, fast_sync_cursor)
+      VALUES (?, ?, ?)
+      ON CONFLICT(account_id) DO UPDATE SET
+        last_fast_sync_at = excluded.last_fast_sync_at,
+        fast_sync_cursor  = COALESCE(excluded.fast_sync_cursor, fast_sync_cursor)
+    `).run(accountId, Date.now(), newHistoryId ?? null)
+
+    // ── Seed backfill cursors (idempotent) ────────────────────────────────────
+    for (const folder of ['inbox', 'sent', 'spam']) {
+      db.prepare(`
+        INSERT INTO sync_backfill_cursors (account_id, folder, complete)
+        VALUES (?, ?, 0)
+        ON CONFLICT(account_id, folder) DO NOTHING
+      `).run(accountId, folder)
+    }
 
     db.prepare('UPDATE sync_log SET finished_at = ?, emails_added = ? WHERE id = ?')
       .run(Date.now(), added, logId)
