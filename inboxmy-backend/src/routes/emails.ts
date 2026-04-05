@@ -144,7 +144,7 @@ interface UnreadCounts {
   total_unread: number
   bills: number; govt: number; receipts: number; work: number
   important: number; promotions: number; snoozed: number
-  sent: number; draft: number; spam: number
+  sent: number; draft: number; spam: number; archived: number
 }
 
 function computeUnreadCounts(db: ReturnType<typeof getDb>, userId: string): UnreadCounts {
@@ -161,7 +161,8 @@ function computeUnreadCounts(db: ReturnType<typeof getDb>, userId: string): Unre
                   AND e.snoozed_until > (strftime('%s','now') * 1000)                  THEN 1 END) AS snoozed,
       COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.folder='sent'      THEN 1 END) AS sent,
       COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.folder='draft'     THEN 1 END) AS draft,
-      COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.folder='spam'      THEN 1 END) AS spam
+      COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.folder='spam'      THEN 1 END) AS spam,
+      COUNT(CASE WHEN e.is_read=0 AND e.snoozed_until IS NULL AND e.folder='archived'  THEN 1 END) AS archived
     FROM emails e
     JOIN accounts a ON a.id = e.account_id
     WHERE a.user_id = ?
