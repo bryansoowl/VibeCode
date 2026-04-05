@@ -152,6 +152,30 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (account_id, folder)
   );
   `,
+  // Migration 11: Lazy-loaded heavy data tables
+  `
+  CREATE TABLE IF NOT EXISTS email_body (
+    email_id         TEXT PRIMARY KEY REFERENCES inbox_index(email_id) ON DELETE CASCADE,
+    body_enc         TEXT NOT NULL,
+    body_format      TEXT NOT NULL DEFAULT 'text',
+    raw_headers_enc  TEXT,
+    fetched_at       INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS attachments (
+    attachment_id  TEXT PRIMARY KEY,
+    email_id       TEXT NOT NULL REFERENCES inbox_index(email_id) ON DELETE CASCADE,
+    filename       TEXT NOT NULL,
+    mime_type      TEXT NOT NULL DEFAULT 'application/octet-stream',
+    size_bytes     INTEGER,
+    remote_ref     TEXT,
+    download_state TEXT NOT NULL DEFAULT 'not_downloaded',
+    local_path     TEXT,
+    listed_at      INTEGER NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_attachments_email ON attachments(email_id);
+  `,
 ]
 
 export function runMigrations(db: Database.Database): void {

@@ -76,3 +76,60 @@ describe('Migration 10 — hot path tables', () => {
     expect(rows).toHaveLength(0)
   })
 })
+
+describe('Migration 11 — heavy data tables', () => {
+  let db: Database.Database
+  beforeEach(() => {
+    db = makeTestDb()
+  })
+  afterEach(() => db.close())
+
+  it('creates email_body table with NOT NULL body_enc', () => {
+    const cols = db.prepare("PRAGMA table_info(email_body)").all() as any[]
+    const bodyCol = cols.find((c: any) => c.name === 'body_enc')
+    expect(bodyCol).toBeTruthy()
+    expect(bodyCol.notnull).toBe(1) // NOT NULL enforced
+  })
+
+  it('creates attachments table with expected columns', () => {
+    const cols = db.prepare("PRAGMA table_info(attachments)").all() as any[]
+    const names = cols.map((c: any) => c.name)
+    expect(names).toContain('attachment_id')
+    expect(names).toContain('email_id')
+    expect(names).toContain('filename')
+    expect(names).toContain('mime_type')
+    expect(names).toContain('remote_ref')
+    expect(names).toContain('download_state')
+    expect(names).toContain('listed_at')
+  })
+
+  it('email_body FK cascades delete from inbox_index', () => {
+    db.prepare(`INSERT INTO accounts (id, provider, email, token_enc, created_at)
+      VALUES ('acc1', 'gmail', 'a@test.com', 'enc', 1)`).run()
+    db.prepare(`INSERT INTO inbox_index
+      (email_id, account_id, provider_message_id, sender_email, subject_preview_enc, received_at)
+      VALUES ('uuid-1', 'acc1', 'msg1', 'x@x.com', 'enc', 1)`).run()
+    db.prepare(`INSERT INTO email_body (email_id, body_enc, fetched_at)
+      VALUES ('uuid-1', 'encrypted-body', 1)`).run()
+
+    db.prepare(`DELETE FROM inbox_index WHERE email_id = 'uuid-1'`).run()
+
+    const body = db.prepare(`SELECT * FROM email_body WHERE email_id = 'uuid-1'`).get()
+    expect(body).toBeUndefined()
+  })
+
+  it('attachments FK cascades delete from inbox_index', () => {
+    db.prepare(`INSERT INTO accounts (id, provider, email, token_enc, created_at)
+      VALUES ('acc1', 'gmail', 'a@test.com', 'enc', 1)`).run()
+    db.prepare(`INSERT INTO inbox_index
+      (email_id, account_id, provider_message_id, sender_email, subject_preview_enc, received_at)
+      VALUES ('uuid-1', 'acc1', 'msg1', 'x@x.com', 'enc', 1)`).run()
+    db.prepare(`INSERT INTO attachments (attachment_id, email_id, filename, listed_at)
+      VALUES ('att-1', 'uuid-1', 'file.pdf', 1)`).run()
+
+    db.prepare(`DELETE FROM inbox_index WHERE email_id = 'uuid-1'`).run()
+
+    const att = db.prepare(`SELECT * FROM attachments WHERE attachment_id = 'att-1'`).get()
+    expect(att).toBeUndefined()
+  })
+})
