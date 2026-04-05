@@ -71,6 +71,8 @@ CREATE INDEX idx_inbox_backfill
   ON inbox_index(account_id, folder, received_at DESC, email_id DESC);
 
 -- Unread count aggregation
+-- Column order serves: account_id + folder + is_read=0 + snoozed_until IS NULL queries.
+-- If per-tab badge counts are needed in future, reorder to (account_id, folder, tab, is_read, snoozed_until).
 CREATE INDEX idx_inbox_unread
   ON inbox_index(account_id, folder, is_read, tab, snoozed_until);
 
@@ -98,7 +100,7 @@ CREATE TABLE sync_backfill_cursors (
 ```sql
 CREATE TABLE email_body (
   email_id         TEXT PRIMARY KEY REFERENCES inbox_index(email_id) ON DELETE CASCADE,
-  body_enc         TEXT,                        -- encrypted body content
+  body_enc         TEXT NOT NULL,               -- encrypted body content (never NULL; insert only when body is ready)
   body_format      TEXT NOT NULL DEFAULT 'text',  -- 'html' | 'text'
   raw_headers_enc  TEXT,                        -- encrypted raw headers
   fetched_at       INTEGER NOT NULL
@@ -140,10 +142,14 @@ CREATE INDEX idx_attachments_email ON attachments(email_id);
    b. Run spam scorer on headers/sender only
    c. Generate internal UUID for email_id
    d. INSERT INTO inbox_index ON CONFLICT(account_id, provider_message_id) DO NOTHING
-   e. INSERT INTO emails (legacy path, unchanged)
+   e. INSERT INTO emails (legacy path, unchanged — independent write, failure here does NOT
+      roll back the inbox_index insert; these are intentionally isolated writes)
 5. Update sync_state.fast_sync_cursor = new provider cursor
    Gmail: capture fresh historyId via getProfile() after full sync fallback
-6. Ensure sync_backfill_cursors row exists for each folder (insert if absent)
+6. For each folder in ['inbox', 'sent', 'spam']:
+   INSERT INTO sync_backfill_cursors (account_id, folder, complete)
+   VALUES (?, ?, 0)
+   ON CONFLICT(account_id, folder) DO NOTHING   -- idempotent; never overwrite existing cursor
 7. Return — UI renders from inbox_index immediately
 ```
 
@@ -159,16 +165,32 @@ CREATE INDEX idx_attachments_email ON attachments(email_id);
 1. For each folder in ['inbox', 'sent', 'spam']:
    a. Read sync_backfill_cursors WHERE account_id=? AND folder=?
    b. If complete=1 → skip
-   c. Parse cursor JSON: { received_at, email_id }
-   d. Query provider for 25 emails older than cursor (metadata only)
+   c. Parse cursor JSON: { received_at, email_id }  ← BACKFILL CURSOR FORMAT
+      (distinct from the route's next_cursor format — do NOT conflate)
+   d. Query provider for 25 emails older than cursor position (metadata only)
    e. INSERT INTO inbox_index ON CONFLICT(account_id, provider_message_id) DO NOTHING
-   f. Update sync_backfill_cursors.cursor = { received_at, email_id } of oldest in batch
+      for each row in the batch; collect email_ids where result.changes > 0.
+      Call this set: inserted_ids
+   f. Derive new cursor from inbox_index scoped to inserted_ids only:
+        SELECT received_at, email_id FROM inbox_index
+        WHERE email_id IN (<inserted_ids>)
+        ORDER BY received_at ASC, email_id ASC   -- ASC to find batch-oldest row
+        LIMIT 1
+      Store as: { "received_at": <value>, "email_id": <value> }
+      IMPORTANT: scope query to inserted_ids — do NOT query globally for the folder's
+      oldest row, or the cursor will jump to the start of already-synced history on
+      every call after the first, causing the backfill to stall indefinitely.
+      If inserted_ids is empty (all conflicted), keep the existing cursor unchanged.
    g. If batch size < 25 → set complete=1
+      Note: on a small mailbox the very first batch may return < 25 rows, immediately
+      marking the folder complete. This is correct — the mailbox is fully backfilled.
 2. Update sync_state.last_backfill_at
 3. Return { folder, added, complete } per folder
 ```
 
-**Ordering rule:** Backfill uses `inbox_index` ordering `(received_at DESC, email_id DESC)` — not provider ordering — for cursor position tracking.
+**Ordering rule:** The hot read path index uses `(received_at DESC, email_id DESC)` ordering. Cursor derivation in step 2g uses `ASC` to locate the oldest (minimum) row in the inserted batch — this is the correct direction for finding the next page boundary.
+
+**Cursor format note:** `sync_backfill_cursors.cursor` uses `{ received_at, email_id }` field names. The route's `next_cursor` response uses `{ before_ts, before_id }` field names. These are two separate cursor formats for two separate systems — never store a route cursor in `sync_backfill_cursors` or vice versa.
 
 Scheduled by Electron on a low-priority interval (e.g. every 5 min, idle-only).
 
@@ -178,8 +200,8 @@ Scheduled by Electron on a low-priority interval (e.g. every 5 min, idle-only).
 
 ```
 1. SELECT * FROM email_body WHERE email_id = ?
-2. If row exists (body_enc IS NOT NULL):
-   → decrypt and return immediately
+2. If row exists:
+   → decrypt body_enc and return immediately
 3. If not exists:
    a. Fetch full email from provider (Gmail: format='full', Outlook: $select=body,internetMessageHeaders)
    b. Encrypt body_enc and raw_headers_enc using user's dataKey
@@ -193,7 +215,7 @@ Scheduled by Electron on a low-priority interval (e.g. every 5 min, idle-only).
 4. Decrypt and return body to client
 ```
 
-**Concurrent request safety:** If two requests race through step 3, one INSERT wins and one is a DO NOTHING no-op. Both requests have the body in memory from their own provider fetch and both return correctly. No placeholder rows, no corruption.
+**Concurrent request safety:** If two requests race through step 3, both fetch the body from the provider. Both then execute the transaction: one INSERT wins (stores the body), the other INSERT is a DO NOTHING no-op. Both transactions still execute the UPDATE `has_full_body=1` — this is safe because `UPDATE` is idempotent (setting 1→1 is harmless). Both requests decrypt their in-memory copy of the body and return it to the user. No placeholder rows, no corruption, no null body.
 
 ### Phase 4 — Lazy Attachment Load (unchanged before Migration 11)
 
@@ -203,6 +225,7 @@ Scheduled by Electron on a low-priority interval (e.g. every 5 min, idle-only).
 ```
 1. SELECT * FROM attachments WHERE email_id = ?
 2. If rows exist AND listed_at > (now - 6 hours) → return cached list
+   (6-hour TTL is application-level config, not enforced by schema)
 3. Else → fetch from provider API, INSERT OR REPLACE into attachments, return
    NOTE: Gmail remote_ref may expire — always validate listed_at staleness before using
 4. Download: only on user request
@@ -229,12 +252,15 @@ ORDER BY received_at DESC, email_id DESC
 LIMIT ?
 
 -- Subsequent pages (with cursor):
+-- params bind order: account_id, folder, tab, before_ts, before_id, limit
+-- before_ts = next_cursor.before_ts, before_id = next_cursor.before_id
 SELECT * FROM inbox_index
 WHERE account_id = ?
   AND folder = ?
   AND tab = ?
   AND snoozed_until IS NULL
   AND (received_at, email_id) < (?, ?)   -- SQLite row value comparison (v3.15+)
+                                         -- better-sqlite3 bundles SQLite >= 3.31, safe to use
 ORDER BY received_at DESC, email_id DESC
 LIMIT ?
 ```
@@ -282,7 +308,7 @@ Response:
 | Gmail | Message IDs stable on folder move | No action needed |
 | Outlook | No delta token support yet | Date-based fetch only; `fast_sync_cursor` stays NULL; documented limitation |
 | Outlook | No tab taxonomy | All emails default to `tab='primary'` |
-| Outlook | Message ID changes on folder move | Old row becomes stale (known limitation); new ID inserts cleanly via `DO NOTHING` |
+| Outlook | Message ID changes on folder move | **Known UX regression:** stale row remains visible in inbox with incorrect folder until a future cleanup pass. New ID inserts cleanly via `DO NOTHING`. Deferred to known limitations. |
 
 ---
 
@@ -298,13 +324,16 @@ Response:
 | `src/email/outlook-client.ts` | Add metadata-only select path |
 | `src/email/attachments.ts` | After M11: cache listing in `attachments` table with 6h TTL |
 
-**Not touched:** `src/crypto.ts`, `src/auth/*`, `src/middleware/*`, `src/db/index.ts`, `src/db/schema.sql`, existing `emails` table, existing `GET /api/emails` route.
+**Not touched:** `src/crypto.ts`, `src/auth/*`, `src/middleware/*`, `src/db/index.ts`, existing `emails` table, existing `GET /api/emails` route.
+
+**Note on `src/db/schema.sql`:** This file is a legacy DDL snapshot and is not the canonical source of truth — `src/db/migrations.ts` is canonical. `schema.sql` is intentionally excluded from this change to avoid divergence with the migration runner. It does not need to be kept in sync.
 
 ---
 
 ## 10. Known Limitations (Out of Scope)
 
-- Outlook delta token sync (future work — `fast_sync_cursor` column is ready)
-- Stale row cleanup for Outlook ID mutations (future cleanup pass)
-- Full-text search on `inbox_index` (separate task)
-- Attachment download to local disk (schema is ready; download logic is future work)
+- **Outlook delta token sync** — future work; `fast_sync_cursor` column is ready to receive it
+- **Outlook stale rows on folder move** — when an Outlook email is moved between folders, its message ID changes. The old `inbox_index` row remains with the wrong folder label and will appear as a ghost email in that folder until a cleanup pass runs. This is a known UX regression, intentionally deferred.
+- **Outlook tab taxonomy** — Outlook has no equivalent to Gmail's Primary/Promotions/Social tabs. All Outlook emails are assigned `tab='primary'`. Tab filtering in the inbox UI should be hidden or disabled for Outlook accounts.
+- **Full-text search on `inbox_index`** — separate task, not part of this migration
+- **Attachment download to local disk** — schema is ready (`local_path`, `download_state`); download logic is future work
