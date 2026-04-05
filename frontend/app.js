@@ -692,14 +692,15 @@ function toggleAccountPill(accountId, el) {
 }
 
 function setupInfiniteScroll() {
-  const sentinel = document.getElementById('scroll-sentinel');
-  if (!sentinel) return;
-  const observer = new IntersectionObserver(entries => {
-    if (entries[0].isIntersecting && emailHasMore && !emailLoading) {
+  const elItems = document.getElementById('el-items');
+  if (!elItems) return;
+  elItems.addEventListener('scroll', () => {
+    if (emailLoading || !emailHasMore) return;
+    const { scrollTop, scrollHeight, clientHeight } = elItems;
+    if (scrollHeight - scrollTop - clientHeight < 200) {
       loadEmails(false);
     }
-  }, { rootMargin: '200px' });
-  observer.observe(sentinel);
+  });
 }
 
 function showApiError(err) {
