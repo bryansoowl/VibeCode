@@ -256,10 +256,10 @@ emailsRouter.get('/index', (req: Request, res: Response) => {
           AND folder = ?
           AND tab = ?
           AND snoozed_until IS NULL
-          AND (received_at < ? OR (received_at = ? AND email_id < ?))
+          AND (received_at, email_id) < (?, ?)
         ORDER BY received_at DESC, email_id DESC
         LIMIT ?
-      `).all(accountId, folder, tab, before_ts, before_ts, before_id, limit)
+      `).all(accountId, folder, tab, before_ts, before_id, limit)
     : db.prepare(`
         SELECT * FROM inbox_index
         WHERE account_id = ?
