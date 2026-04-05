@@ -287,13 +287,13 @@ async function runSyncTick() {
 async function runBackfillTick() {
   // Lock — skip if a previous run is still in progress
   if (backfillRunning) {
-    console.log('[backfill] skipped — previous run still in progress')
+    console.log('[backfill] skipped - previous run still in progress')
     return
   }
 
   // Idle gate — only run when the window is not focused (user is away)
   if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()) {
-    console.log('[backfill] skipped — window focused')
+    console.log('[backfill] skipped - window focused')
     return
   }
 
@@ -302,14 +302,14 @@ async function runBackfillTick() {
 
   try {
     const accountsRes = await apiRequest('/api/accounts')
-    if (!accountsRes || accountsRes.status !== 200 || !Array.isArray(accountsRes.body)) {
-      console.log('[backfill] skipped — no accounts (not logged in?)')
+    if (!accountsRes || accountsRes.status !== 200 || !Array.isArray(accountsRes.body?.accounts)) {
+      console.log('[backfill] skipped - no accounts (not logged in?)')
       return
     }
 
-    const accounts = accountsRes.body
+    const accounts = accountsRes.body.accounts
     if (accounts.length === 0) {
-      console.log('[backfill] skipped — no connected accounts')
+      console.log('[backfill] skipped - no connected accounts')
       return
     }
 
@@ -318,7 +318,7 @@ async function runBackfillTick() {
       console.log(`[backfill] ${account.email} (${account.provider})`)
       const result = await apiRequest('/api/sync/backfill', 'POST', { accountId: account.id })
       if (!result || result.status !== 200) {
-        console.log(`[backfill] ${account.email} — failed (status ${result?.status ?? 'network error'})`)
+        console.log(`[backfill] ${account.email} - failed (status ${result?.status ?? 'network error'})`)
         continue
       }
       for (const r of result.body.results ?? []) {
