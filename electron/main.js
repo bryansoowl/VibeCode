@@ -303,7 +303,7 @@ async function runBackfillTick() {
   try {
     const accountsRes = await apiRequest('/api/accounts')
     if (!accountsRes || accountsRes.status !== 200 || !Array.isArray(accountsRes.body?.accounts)) {
-      console.log('[backfill] skipped - no accounts (not logged in?)')
+      console.log(`[backfill] skipped - accounts fetch failed (status=${accountsRes?.status ?? 'null'} body=${JSON.stringify(accountsRes?.body)})`)
       return
     }
 
