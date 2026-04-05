@@ -114,15 +114,13 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
 .email-row.bulk-selected .er-cb{opacity:1;pointer-events:auto}
 .email-row.bulk-selected .er-time{opacity:0}
 /* bulk action bar — fits within 340px panel */
-.bulk-bar{display:none;padding:7px 10px;border-bottom:1px solid var(--border);background:#fff;flex-shrink:0;align-items:center;gap:3px;overflow:hidden}
+.bulk-bar{display:none;padding:7px 10px;border-bottom:1px solid var(--border);background:#fff;flex-shrink:0;align-items:center;gap:3px}
 .bulk-bar.active{display:flex}
 .bulk-count{font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap;padding:0 4px}
 .bulk-sep{width:1px;height:16px;background:var(--border);flex-shrink:0;margin:0 3px}
 .bulk-btn{padding:5px 6px;border-radius:7px;border:1px solid var(--border);background:transparent;font-family:var(--sans);cursor:pointer;transition:all .15s;display:flex;align-items:center;color:var(--ink3);flex-shrink:0;line-height:0}
 .bulk-btn:hover{background:var(--cream2);border-color:var(--ink3);color:var(--ink)}
 .bulk-btn.danger:hover{background:var(--coral-bg);border-color:var(--coral);color:var(--coral)}
-.bulk-btn.clear-btn{margin-left:auto;border-color:transparent;color:var(--ink4)}
-.bulk-btn.clear-btn:hover{background:var(--cream2);border-color:var(--border);color:var(--ink)}
 .bulk-btn svg{width:14px;height:14px;stroke-width:2.2;display:block}
 .bulk-dropdown-wrap{position:relative;flex-shrink:0}
 .bulk-dropdown{display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:140px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 6px 24px rgba(26,22,18,.12);z-index:500;overflow:hidden}
@@ -699,7 +697,6 @@ body{background:var(--cream);color:var(--ink);font-family:var(--sans);font-size:
         <button class="bulk-btn" onclick="openBulkLabelDropdown()" title="Add label"><i data-lucide="tag"></i><i data-lucide="chevron-down" style="width:10px;height:10px;margin-left:-1px"></i></button>
         <div class="bulk-dropdown" id="bulk-label-dd"></div>
       </div>
-      <button class="bulk-btn clear-btn" onclick="clearBulkSelection()" title="Clear selection"><i data-lucide="x"></i></button>
     </div>
     <div class="el-filters">
       <div class="el-filter active" onclick="setFilter('all', this)" id="filter-all">All</div>

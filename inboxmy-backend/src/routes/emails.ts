@@ -84,6 +84,8 @@ emailsRouter.get('/', (req: Request, res: Response) => {
   } else {
     conditions.push('e.snoozed_until IS NULL')
   }
+  // Always exclude trash unless the user is explicitly viewing the trash folder
+  if (folder !== 'trash') { conditions.push("e.folder != 'trash'") }
   // Inbox always excludes Promotions tab unless an explicit tab filter is set
   if (folder === 'inbox' && !tab) { conditions.push("e.tab != 'promotions'") }
 
