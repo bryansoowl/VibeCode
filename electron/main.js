@@ -174,16 +174,17 @@ function createTray() {
 }
 
 // ── Authenticated API helper ─────────────────────────────────────────────────
-// Makes a request using the renderer's session (carries the session cookie).
+// Makes a request to the backend carrying the renderer's session cookie.
+// net.request with session: doesn't forward cookies automatically for localhost;
+// we read them from the cookie jar and set the Cookie header manually.
 // Returns { status, body } or null on network error.
-function apiRequest(path, method = 'GET', bodyObj = null) {
+async function apiRequest(path, method = 'GET', bodyObj = null) {
+  if (!mainWindow || mainWindow.isDestroyed()) return null
+  const cookies = await mainWindow.webContents.session.cookies.get({ url: BACKEND_URL })
+  const cookieHeader = cookies.map(c => `${c.name}=${c.value}`).join('; ')
   return new Promise((resolve) => {
-    if (!mainWindow || mainWindow.isDestroyed()) { resolve(null); return }
-    const req = net.request({
-      url: `${BACKEND_URL}${path}`,
-      method,
-      session: mainWindow.webContents.session,
-    })
+    const req = net.request({ url: `${BACKEND_URL}${path}`, method })
+    if (cookieHeader) req.setHeader('Cookie', cookieHeader)
     req.on('response', (res) => {
       let buf = ''
       res.on('data', (chunk) => { buf += chunk })
