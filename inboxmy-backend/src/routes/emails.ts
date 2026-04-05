@@ -221,6 +221,74 @@ emailsRouter.get('/:id/attachments/:attId', async (req: Request, res: Response) 
   }
 })
 
+// ── GET /api/emails/index — cursor-based inbox from inbox_index ───────────────
+// NO OFFSET. NO JOIN in hot path. Ownership checked separately before the hot query.
+// Uses idx_inbox_hot (WHERE snoozed_until IS NULL) for fast inbox rendering.
+// next_cursor format: { before_ts, before_id } — distinct from backfill cursor format.
+emailsRouter.get('/index', (req: Request, res: Response) => {
+  const schema = z.object({
+    accountId: z.string(),
+    folder:    z.string().default('inbox'),
+    tab:       z.string().default('primary'),
+    limit:     z.coerce.number().min(1).max(100).default(50),
+    before_ts: z.coerce.number().optional(),
+    before_id: z.string().optional(),
+  })
+
+  const parsed = schema.safeParse(req.query)
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() })
+
+  const { accountId, folder, tab, limit, before_ts, before_id } = parsed.data
+  const user = (req as any).user
+  const db = getDb()
+
+  // Ownership check — keeps hot query JOIN-free
+  const account = db.prepare(
+    'SELECT id FROM accounts WHERE id = ? AND user_id = ?'
+  ).get(accountId, user.id)
+  if (!account) return res.status(404).json({ error: 'Account not found' })
+
+  const hasCursor = before_ts !== undefined && before_id !== undefined
+  const rows: any[] = hasCursor
+    ? db.prepare(`
+        SELECT * FROM inbox_index
+        WHERE account_id = ?
+          AND folder = ?
+          AND tab = ?
+          AND snoozed_until IS NULL
+          AND (received_at < ? OR (received_at = ? AND email_id < ?))
+        ORDER BY received_at DESC, email_id DESC
+        LIMIT ?
+      `).all(accountId, folder, tab, before_ts, before_ts, before_id, limit)
+    : db.prepare(`
+        SELECT * FROM inbox_index
+        WHERE account_id = ?
+          AND folder = ?
+          AND tab = ?
+          AND snoozed_until IS NULL
+        ORDER BY received_at DESC, email_id DESC
+        LIMIT ?
+      `).all(accountId, folder, tab, limit)
+
+  try {
+    const emails = rows.map(r => ({
+      ...r,
+      subject: decrypt(r.subject_preview_enc, user.dataKey),
+      snippet: r.snippet_preview_enc ? decrypt(r.snippet_preview_enc, user.dataKey) : null,
+      subject_preview_enc: undefined,
+      snippet_preview_enc: undefined,
+    }))
+
+    const next_cursor = rows.length === limit
+      ? { before_ts: rows[rows.length - 1].received_at, before_id: rows[rows.length - 1].email_id }
+      : null
+
+    return res.json({ emails, next_cursor })
+  } catch {
+    return res.status(500).json({ error: 'Failed to decrypt index data' })
+  }
+})
+
 emailsRouter.get('/:id', (req: Request, res: Response) => {
   const user = (req as any).user
   const db = getDb()
