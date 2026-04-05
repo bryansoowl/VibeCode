@@ -103,6 +103,55 @@ const MIGRATIONS: string[] = [
     ON emails(account_id, folder, is_read, tab, snoozed_until)`,
   // Migration 9: persist MSAL token cache per Outlook account so refresh tokens survive restarts
   `ALTER TABLE accounts ADD COLUMN msal_cache TEXT`,
+  // Migration 10: Progressive sync hot path tables
+  `
+  CREATE TABLE IF NOT EXISTS inbox_index (
+    email_id             TEXT PRIMARY KEY,
+    account_id           TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    provider_message_id  TEXT NOT NULL,
+    thread_id            TEXT,
+    sender_email         TEXT NOT NULL,
+    sender_name          TEXT,
+    subject_preview_enc  TEXT NOT NULL,
+    snippet_preview_enc  TEXT,
+    received_at          INTEGER NOT NULL,
+    folder               TEXT NOT NULL DEFAULT 'inbox',
+    tab                  TEXT NOT NULL DEFAULT 'primary',
+    is_read              INTEGER NOT NULL DEFAULT 0,
+    is_important         INTEGER NOT NULL DEFAULT 0,
+    has_full_body        INTEGER NOT NULL DEFAULT 0,
+    sync_state           TEXT NOT NULL DEFAULT 'partial',
+    snoozed_until        INTEGER,
+    category             TEXT,
+    UNIQUE(account_id, provider_message_id)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_inbox_hot
+    ON inbox_index(account_id, folder, tab, received_at DESC, email_id DESC)
+    WHERE snoozed_until IS NULL;
+
+  CREATE INDEX IF NOT EXISTS idx_inbox_backfill
+    ON inbox_index(account_id, folder, received_at DESC, email_id DESC);
+
+  CREATE INDEX IF NOT EXISTS idx_inbox_unread
+    ON inbox_index(account_id, folder, is_read, tab, snoozed_until);
+
+  CREATE TABLE IF NOT EXISTS sync_state (
+    account_id           TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+    last_fast_sync_at    INTEGER,
+    fast_sync_cursor     TEXT,
+    last_backfill_at     INTEGER,
+    backfill_complete    INTEGER NOT NULL DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS sync_backfill_cursors (
+    account_id  TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    folder      TEXT NOT NULL,
+    cursor      TEXT,
+    complete    INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (account_id, folder)
+  );
+  `,
 ]
 
 export function runMigrations(db: Database.Database): void {
