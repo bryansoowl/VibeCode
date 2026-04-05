@@ -1,7 +1,7 @@
 // src/email/gmail-client.ts
 import { google } from 'googleapis'
 import { getAuthedClient } from '../auth/gmail'
-import type { NormalizedEmail } from './types'
+import type { NormalizedEmail, NormalizedEmailMetadata } from './types'
 
 const FETCH_LIMIT = 500  // per full sync run
 
@@ -109,6 +109,90 @@ export async function fetchNewEmails(
   }
 
   return { emails, newHistoryId }
+}
+
+/**
+ * Fetch email metadata only (no body) — used by Phase 1 fast sync and Phase 2 backfill.
+ * @param accountId - The account to fetch for
+ * @param beforeMs - Optional: fetch emails received before this unix ms timestamp (for backfill pagination)
+ * @param limit - Max emails to fetch (default 100, backfill uses 25)
+ */
+export async function fetchEmailsMetadata(
+  accountId: string,
+  beforeMs?: number,
+  limit = 100
+): Promise<NormalizedEmailMetadata[]> {
+  const auth = await getAuthedClient(accountId)
+  const gmail = google.gmail({ version: 'v1', auth })
+
+  // Build date query
+  const query = beforeMs
+    ? `before:${Math.floor(beforeMs / 1000)}`
+    : 'newer_than:90d'
+
+  console.log(`[gmail] fetchEmailsMetadata accountId=${accountId} query="${query}" limit=${limit}`)
+
+  let list: any
+  try {
+    list = await gmail.users.messages.list({
+      userId: 'me',
+      q: query,
+      maxResults: limit,
+      includeSpamTrash: true,
+    })
+  } catch (err: any) {
+    console.error(`[gmail] messages.list error: ${err.message}`)
+    throw err
+  }
+
+  const messages = list.data.messages ?? []
+  const results: NormalizedEmailMetadata[] = []
+
+  for (const msg of messages) {
+    try {
+      const meta = await gmail.users.messages.get({
+        userId: 'me',
+        id: msg.id!,
+        format: 'metadata',
+        metadataHeaders: ['From', 'Subject', 'Date'],
+      })
+      results.push(normalizeGmailMetadata(accountId, meta.data))
+    } catch (err: any) {
+      console.error(`[gmail] messages.get metadata error for ${msg.id}: ${err.message}`)
+    }
+  }
+
+  return results
+}
+
+function normalizeGmailMetadata(accountId: string, msg: any): NormalizedEmailMetadata {
+  const headers: Record<string, string> = {}
+  for (const h of msg.payload?.headers ?? []) {
+    headers[h.name.toLowerCase()] = h.value
+  }
+
+  const labelIds: string[] = msg.labelIds ?? []
+  const from = headers['from'] ?? ''
+  const senderMatch = from.match(/^(.+?)\s*<([^>]+)>$/)
+  const senderEmail = senderMatch ? senderMatch[2] : from
+  const senderName = senderMatch ? senderMatch[1].replace(/"/g, '').trim() : null
+
+  return {
+    id: msg.id,
+    accountId,
+    threadId: msg.threadId ?? null,
+    subject: headers['subject'] ?? '(no subject)',
+    sender: senderEmail.toLowerCase(),
+    senderName,
+    receivedAt: parseInt(msg.internalDate ?? '0'),
+    isRead: !labelIds.includes('UNREAD'),
+    folder: gmailFolder(labelIds),
+    tab: gmailTab(labelIds),
+    isImportant: labelIds.includes('IMPORTANT'),
+    category: null,
+    snippet: msg.snippet ?? null,
+    rawSize: msg.sizeEstimate ?? 0,
+  }
 }
 
 function gmailFolder(labelIds: string[]): import('./types').EmailFolder {
