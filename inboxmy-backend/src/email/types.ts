@@ -21,3 +21,20 @@ export interface NormalizedEmail {
   snippet: string | null
   rawSize: number
 }
+
+export interface NormalizedEmailMetadata {
+  id: string            // provider message id
+  accountId: string
+  threadId: string | null
+  subject: string
+  sender: string
+  senderName: string | null
+  receivedAt: number
+  isRead: boolean
+  folder: EmailFolder
+  tab: EmailTab
+  isImportant: boolean
+  category: EmailCategory
+  snippet: string | null
+  rawSize: number
+}
