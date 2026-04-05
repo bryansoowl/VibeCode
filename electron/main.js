@@ -9,6 +9,7 @@ const { makeNotificationKey } = require('./utils')
 const BACKEND_PORT = 3001
 const BACKEND_URL = `http://localhost:${BACKEND_PORT}`
 const SYNC_INTERVAL_MS = 60 * 1000              // 60 seconds — email sync (History API makes this cheap)
+const BACKFILL_INTERVAL_MS = 5 * 60 * 1000      // 5 minutes — progressive backfill (idle only)
 const NOTIFICATION_INTERVAL_MS = 60 * 60 * 1000 // 60 minutes — bill notification check
 const SCHEDULER_STARTUP_DELAY_MS = 30 * 1000   // 30 seconds after launch
 const NOTIFIED_FILE = path.join(app.getPath('userData'), 'notified.json')
@@ -21,6 +22,8 @@ let tray = null
 let backendProcess = null
 let syncTimer = null
 let notifTimer = null
+let backfillTimer = null
+let backfillRunning = false   // lock — prevents overlapping backfill runs
 let emailNotifEnabled = true  // in-memory cache — populated in app.whenReady
 
 const autoLauncher = new AutoLaunch({ name: 'InboxMY' })
@@ -81,21 +84,31 @@ function startBackend() {
   const dataDir = path.join(backendDir, 'data')
   fs.mkdirSync(dataDir, { recursive: true })
 
-  backendProcess = spawn(process.execPath, [serverPath], {
+  // Use the system node binary, not electron.exe — the backend is a plain Node.js server
+  // and native modules (better-sqlite3) are compiled against the system Node ABI, not Electron's.
+  const nodeBin = process.execPath.toLowerCase().includes('electron') ? 'node' : process.execPath
+
+  backendProcess = spawn(nodeBin, [serverPath], {
     env: {
       ...process.env,
       NODE_ENV: 'production',
       PORT: String(BACKEND_PORT),
       DATA_DIR: dataDir,
+      FORCE_COLOR: '1',
     },
     // Set cwd to inboxmy-backend so dotenv can find .env for SESSION_SECRET etc.
     cwd: backendDir,
     stdio: 'pipe',
   })
 
-  backendProcess.stdout?.on('data', (d) => console.log('[backend]', d.toString().trim()))
-  backendProcess.stderr?.on('data', (d) => console.error('[backend err]', d.toString().trim()))
-  backendProcess.on('exit', (code) => console.log('[backend] exited with code', code))
+  backendProcess.stdout?.on('data', (d) => console.log('[backend]', d.toString('utf8').trim()))
+  backendProcess.stderr?.on('data', (d) => console.log('[backend err]', d.toString('utf8').trim()))
+  backendProcess.on('exit', (code, signal) => {
+    if (code !== 0) console.log(`[backend] exited — code=${code} signal=${signal}`)
+  })
+  backendProcess.on('error', (err) => {
+    console.log('[backend] spawn error:', err.message)
+  })
 }
 
 async function waitForBackend(retries = 40) {
@@ -158,6 +171,36 @@ function createTray() {
   tray.setToolTip('InboxMY')
   tray.setContextMenu(menu)
   tray.on('click', () => { mainWindow?.show(); mainWindow?.focus() })
+}
+
+// ── Authenticated API helper ─────────────────────────────────────────────────
+// Makes a request using the renderer's session (carries the session cookie).
+// Returns { status, body } or null on network error.
+function apiRequest(path, method = 'GET', bodyObj = null) {
+  return new Promise((resolve) => {
+    if (!mainWindow || mainWindow.isDestroyed()) { resolve(null); return }
+    const req = net.request({
+      url: `${BACKEND_URL}${path}`,
+      method,
+      session: mainWindow.webContents.session,
+    })
+    req.on('response', (res) => {
+      let buf = ''
+      res.on('data', (chunk) => { buf += chunk })
+      res.on('end', () => {
+        try { resolve({ status: res.statusCode, body: JSON.parse(buf) }) }
+        catch { resolve({ status: res.statusCode, body: null }) }
+      })
+    })
+    req.on('error', () => resolve(null))
+    if (bodyObj !== null) {
+      const payload = JSON.stringify(bodyObj)
+      req.setHeader('Content-Type', 'application/json')
+      req.setHeader('Content-Length', Buffer.byteLength(payload))
+      req.write(payload)
+    }
+    req.end()
+  })
 }
 
 // ── Scheduler ───────────────────────────────────────────────────────────────
@@ -238,6 +281,58 @@ async function runSyncTick() {
     unsnoozReq.setHeader('Content-Length', '0')
     unsnoozReq.end()
   })
+}
+
+// Progressive backfill: fetch older emails into inbox_index, 25 at a time (runs every 5 min, idle only)
+async function runBackfillTick() {
+  // Lock — skip if a previous run is still in progress
+  if (backfillRunning) {
+    console.log('[backfill] skipped — previous run still in progress')
+    return
+  }
+
+  // Idle gate — only run when the window is not focused (user is away)
+  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()) {
+    console.log('[backfill] skipped — window focused')
+    return
+  }
+
+  backfillRunning = true
+  console.log('[backfill] starting')
+
+  try {
+    const accountsRes = await apiRequest('/api/accounts')
+    if (!accountsRes || accountsRes.status !== 200 || !Array.isArray(accountsRes.body)) {
+      console.log('[backfill] skipped — no accounts (not logged in?)')
+      return
+    }
+
+    const accounts = accountsRes.body
+    if (accounts.length === 0) {
+      console.log('[backfill] skipped — no connected accounts')
+      return
+    }
+
+    // Sequential per account — avoids hammering provider rate limits
+    for (const account of accounts) {
+      console.log(`[backfill] ${account.email} (${account.provider})`)
+      const result = await apiRequest('/api/sync/backfill', 'POST', { accountId: account.id })
+      if (!result || result.status !== 200) {
+        console.log(`[backfill] ${account.email} — failed (status ${result?.status ?? 'network error'})`)
+        continue
+      }
+      for (const r of result.body.results ?? []) {
+        if (r.skipped) continue
+        console.log(`[backfill] ${account.email}/${r.folder} — added ${r.added}${r.complete ? ' (complete)' : ''}`)
+      }
+    }
+
+    console.log('[backfill] done')
+  } catch (err) {
+    console.error('[backfill] error:', err.message)
+  } finally {
+    backfillRunning = false
+  }
 }
 
 // Check for due-soon bills and fire notifications (runs every 60 min)
@@ -434,11 +529,17 @@ app.whenReady().then(async () => {
   setupIPC()
   emailNotifEnabled = loadPrefs().emailNotifications
 
-  // Email sync: first run 30s after launch, then every 15 min
+  // Email sync: first run 30s after launch, then every 60s
   syncTimer = setTimeout(() => {
     runSyncTick()
     syncTimer = setInterval(runSyncTick, SYNC_INTERVAL_MS)
   }, SCHEDULER_STARTUP_DELAY_MS)
+
+  // Progressive backfill: first run 90s after launch, then every 5 min (idle only)
+  backfillTimer = setTimeout(() => {
+    runBackfillTick()
+    backfillTimer = setInterval(runBackfillTick, BACKFILL_INTERVAL_MS)
+  }, 90_000)
 
   // Bill notifications: first check 60s after launch, then every 60 min
   notifTimer = setTimeout(() => {
@@ -452,8 +553,9 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
-  if (syncTimer)  { clearTimeout(syncTimer);  clearInterval(syncTimer) }
-  if (notifTimer) { clearTimeout(notifTimer); clearInterval(notifTimer) }
+  if (syncTimer)     { clearTimeout(syncTimer);     clearInterval(syncTimer) }
+  if (backfillTimer) { clearTimeout(backfillTimer); clearInterval(backfillTimer) }
+  if (notifTimer)    { clearTimeout(notifTimer);    clearInterval(notifTimer) }
   if (backendProcess) backendProcess.kill()
 })
 
