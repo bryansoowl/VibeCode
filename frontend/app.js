@@ -250,6 +250,10 @@ let emailOffset = 0;
 let emailLoading = false;
 let emailHasMore = true;
 
+// Multi-select state
+let selectedEmailIds = new Set();
+let lastSelectedIndex = -1;
+
 let userLabels = []     // [{ id, name, color, count }]
 let currentLabelId = null  // active label filter
 
@@ -410,7 +414,8 @@ function renderEmailRow(email) {
   const row = document.createElement('div');
   const isUnread = !email.is_read;
   const isSelected = email.id === selectedEmailId;
-  row.className = 'email-row' + (isUnread ? ' unread' : '') + (isSelected ? ' selected' : '');
+  const isBulkSelected = selectedEmailIds.has(email.id);
+  row.className = 'email-row' + (isUnread ? ' unread' : '') + (isSelected ? ' selected' : '') + (isBulkSelected ? ' bulk-selected' : '');
   row.id = 'row-' + email.id;
 
   const name = email.sender_name || email.sender || '?';
@@ -428,7 +433,10 @@ function renderEmailRow(email) {
   const time = email.received_at ? formatRelativeTime(email.received_at) : '';
 
   row.innerHTML = `
-    <div class="er-avatar" style="background:${color}">${initial}</div>
+    <div class="er-checkbox-wrap">
+      <div class="er-avatar" style="background:${color}">${initial}</div>
+      <div class="er-cb"><input type="checkbox" class="er-cb-input"${isBulkSelected ? ' checked' : ''}></div>
+    </div>
     <div class="er-body">
       <div class="er-from">${escHtml(name)}</div>
       <div class="er-subject">${escHtml(email.subject || '(no subject)')}</div>
@@ -439,6 +447,14 @@ function renderEmailRow(email) {
       ${tagHtml}
       ${isUnread ? '<div class="er-unread-dot"></div>' : ''}
     </div>`;
+
+  // Checkbox area toggles selection; does NOT open the email
+  row.querySelector('.er-checkbox-wrap').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const idx = emailCache.findIndex(em => em.id === email.id);
+    toggleEmailSelect(email.id, idx, e);
+  });
+
   row.onclick = () => selectEmail(email.id);
   row.addEventListener('contextmenu', (e) => {
     openCtxMenu(e, email.id, {
@@ -466,6 +482,7 @@ async function loadEmails(reset = false) {
     emailOffset = 0;
     emailHasMore = true;
     document.getElementById('el-items').innerHTML = '';
+    clearBulkSelection();
   }
 
   try {
@@ -711,6 +728,144 @@ function showApiError(err) {
     showToast('Error: ' + msg);
   }
 }
+
+// ── MULTI-SELECT ──────────────────────────────────────────────────────────────
+
+function toggleEmailSelect(emailId, index, event) {
+  if (event.shiftKey && lastSelectedIndex >= 0 && index >= 0) {
+    const start = Math.min(lastSelectedIndex, index);
+    const end   = Math.max(lastSelectedIndex, index);
+    for (let i = start; i <= end; i++) {
+      if (emailCache[i]) selectedEmailIds.add(emailCache[i].id);
+    }
+  } else if (selectedEmailIds.has(emailId)) {
+    selectedEmailIds.delete(emailId);
+  } else {
+    selectedEmailIds.add(emailId);
+  }
+  if (index >= 0) lastSelectedIndex = index;
+  updateBulkSelection();
+}
+
+function updateBulkSelection() {
+  const count = selectedEmailIds.size;
+  const bulkBar  = document.getElementById('bulk-bar');
+  const elHeader = document.querySelector('.el-header');
+  const elItems  = document.getElementById('el-items');
+
+  if (count > 0) {
+    bulkBar.classList.add('active');
+    elHeader.style.display = 'none';
+    elItems.classList.add('selection-mode');
+    document.getElementById('bulk-count-label').textContent = count + ' selected';
+    const allCb = document.getElementById('bulk-select-all-cb');
+    if (allCb) allCb.checked = (count === emailCache.length && !emailHasMore);
+  } else {
+    bulkBar.classList.remove('active');
+    elHeader.style.display = '';
+    elItems.classList.remove('selection-mode');
+    lastSelectedIndex = -1;
+  }
+
+  // Sync row classes + checkboxes
+  document.querySelectorAll('.email-row').forEach(row => {
+    const id = row.id.replace('row-', '');
+    const cb = row.querySelector('.er-cb-input');
+    if (selectedEmailIds.has(id)) {
+      row.classList.add('bulk-selected');
+      if (cb) cb.checked = true;
+    } else {
+      row.classList.remove('bulk-selected');
+      if (cb) cb.checked = false;
+    }
+  });
+}
+
+function clearBulkSelection() {
+  selectedEmailIds.clear();
+  updateBulkSelection();
+}
+
+function bulkSelectAll(checked) {
+  if (checked) emailCache.forEach(e => selectedEmailIds.add(e.id));
+  else selectedEmailIds.clear();
+  updateBulkSelection();
+}
+
+// ── BULK ACTIONS ──────────────────────────────────────────────────────────────
+
+async function bulkArchive() {
+  const ids = [...selectedEmailIds];
+  clearBulkSelection();
+  await Promise.all(ids.map(id =>
+    apiFetch(`/api/emails/${id}/folder`, { method: 'PATCH', body: JSON.stringify({ folder: 'archive' }) })
+  ));
+  ids.forEach(id => removeEmailFromList(id));
+  refreshUnreadCounts();
+}
+
+async function bulkTrash() {
+  const ids = [...selectedEmailIds];
+  clearBulkSelection();
+  await Promise.all(ids.map(id =>
+    apiFetch(`/api/emails/${id}/folder`, { method: 'PATCH', body: JSON.stringify({ folder: 'trash' }) })
+  ));
+  ids.forEach(id => removeEmailFromList(id));
+  refreshUnreadCounts();
+}
+
+async function bulkMarkRead(isRead) {
+  const ids = [...selectedEmailIds];
+  clearBulkSelection();
+  await Promise.all(ids.map(id => markEmailRead(id, isRead)));
+}
+
+async function bulkMoveTo(folder) {
+  closeBulkDropdowns();
+  const ids = [...selectedEmailIds];
+  clearBulkSelection();
+  await Promise.all(ids.map(id =>
+    apiFetch(`/api/emails/${id}/folder`, { method: 'PATCH', body: JSON.stringify({ folder }) })
+  ));
+  ids.forEach(id => removeEmailFromList(id));
+  refreshUnreadCounts();
+}
+
+function openBulkLabelDropdown() {
+  const dd = document.getElementById('bulk-label-dd');
+  const wasOpen = dd.classList.contains('open');
+  closeBulkDropdowns();
+  if (wasOpen) return;
+  dd.innerHTML = userLabels.length === 0
+    ? '<div class="bdd-item" style="color:var(--ink4);cursor:default">No labels yet</div>'
+    : userLabels.map(l => `<div class="bdd-item" onclick="bulkAddLabel('${escHtml(l.id)}')">${escHtml(l.name)}</div>`).join('');
+  dd.classList.add('open');
+}
+
+async function bulkAddLabel(labelId) {
+  closeBulkDropdowns();
+  const ids = [...selectedEmailIds];
+  clearBulkSelection();
+  await Promise.all(ids.map(id =>
+    apiFetch(`/api/emails/${id}/labels/${labelId}`, { method: 'POST' })
+  ));
+  showToast('Label applied to ' + ids.length + ' email' + (ids.length !== 1 ? 's' : ''));
+}
+
+function toggleBulkDropdown(id) {
+  const dd = document.getElementById(id);
+  const wasOpen = dd.classList.contains('open');
+  closeBulkDropdowns();
+  if (!wasOpen) dd.classList.add('open');
+}
+
+function closeBulkDropdowns() {
+  document.querySelectorAll('.bulk-dropdown').forEach(d => d.classList.remove('open'));
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.bulk-dropdown-wrap')) closeBulkDropdowns();
+});
 
 // ── TASK 3: EMAIL DETAIL + MARK READ ─────────────────────────────────────────
 
