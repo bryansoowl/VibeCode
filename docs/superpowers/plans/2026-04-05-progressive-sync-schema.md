@@ -844,6 +844,8 @@ In `src/email/sync-engine.ts`, make the following changes:
 
 **Add `randomUUID` import (already present — verify it's there).**
 
+> **Verify return shape before writing sync_state upsert:** Open `src/email/gmail-client.ts` and confirm the return type of `fetchNewEmails` is `{ emails: NormalizedEmail[], newHistoryId: string | null }`. The sync_state upsert at the end of this step references `newHistoryId` by that exact name — if the variable is named differently in `syncAccount` (e.g. destructured as `gmailResult.newHistoryId`), adjust accordingly.
+
 Inside `syncAccount`, after the existing `insertEmail` prepared statement, add:
 
 ```typescript
@@ -1187,14 +1189,18 @@ syncRouter.post('/backfill', async (req, res) => {
     // Derive new cursor ONLY from inserted_ids — never from the full batch or global DB query.
     // Scoping to inserted_ids prevents the cursor from jumping to the start of already-synced
     // history on subsequent calls, which would cause the backfill to stall indefinitely.
+    // NOTE: better-sqlite3 .get() accepts an array for multi-value positional params.
+    // Use .get(insertedIds) NOT .get(...insertedIds) — the spread form is ambiguous under
+    // TypeScript overloads and harder to reason about. Array form is idiomatic.
     let newCursorJson: string | null = cursorRow.cursor
     if (insertedIds.length > 0) {
+      const placeholders = insertedIds.map(() => '?').join(',')
       const oldestInserted = db.prepare(`
         SELECT received_at, email_id FROM inbox_index
-        WHERE email_id IN (${insertedIds.map(() => '?').join(',')})
+        WHERE email_id IN (${placeholders})
         ORDER BY received_at ASC, email_id ASC
         LIMIT 1
-      `).get(...insertedIds) as any
+      `).get(insertedIds) as any
       if (oldestInserted) {
         newCursorJson = JSON.stringify({
           received_at: oldestInserted.received_at,
@@ -1517,7 +1523,9 @@ git commit -m "feat(routes): add GET /api/emails/index — cursor-based inbox fr
 Append a new describe block:
 
 ```typescript
-// ── Mock provider clients for body fetch tests ──────────────────────────────
+// ── Top-level mocks for body fetch tests ────────────────────────────────────
+// All vi.mock calls MUST be at file top-level — Vitest hoists them automatically.
+// Do NOT place vi.mock inside describe() or it() — the mock will not take effect.
 vi.mock('../src/email/gmail-client', () => ({
   fetchNewEmails: vi.fn(),
   fetchEmailsMetadata: vi.fn(),
@@ -1526,8 +1534,9 @@ vi.mock('../src/email/outlook-client', () => ({
   fetchNewEmails: vi.fn(),
   fetchEmailsMetadata: vi.fn(),
 }))
-
-// Body fetch needs googleapis + outlook auth — mock at module level
+vi.mock('../src/auth/gmail', () => ({
+  getAuthedClient: vi.fn().mockResolvedValue({}),
+}))
 vi.mock('googleapis', () => ({
   google: {
     gmail: () => ({
@@ -1573,16 +1582,17 @@ describe('GET /api/emails/index/:id — on-demand body fetch', () => {
   })
 
   it('fetches and caches body when has_full_body=0', async () => {
-    // Mock the auth client
-    vi.mock('../src/auth/gmail', () => ({
-      getAuthedClient: vi.fn().mockResolvedValue({}),
-    }))
-
     const app = await makeApp()
     const res = await request(app).get('/api/emails/index/uuid-1')
     expect(res.status).toBe(200)
     expect(res.body).toHaveProperty('email_id', 'uuid-1')
-    // body may be null if provider mock not fully wired — verify has_full_body updated
+    expect(res.body.body).toBe('<p>Hello body</p>')
+
+    // Verify DB state: email_body row inserted and has_full_body flag set
+    const bodyRow = testDb.prepare('SELECT * FROM email_body WHERE email_id = ?').get('uuid-1') as any
+    expect(bodyRow).toBeTruthy()
+    const indexRow = testDb.prepare('SELECT has_full_body FROM inbox_index WHERE email_id = ?').get('uuid-1') as any
+    expect(indexRow.has_full_body).toBe(1)
   })
 
   it('serves body from email_body cache when has_full_body=1', async () => {
