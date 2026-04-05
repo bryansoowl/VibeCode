@@ -13,13 +13,13 @@ export async function fetchNewEmails(
 
   const since = sinceMs
     ? new Date(sinceMs).toISOString()
-    : new Date(Date.now() - 30 * 86400_000).toISOString()
+    : new Date(Date.now() - 90 * 86400_000).toISOString()
 
   const result = await client
     .api('/me/messages')
     .filter(`receivedDateTime gt ${since}`)
     .select('id,subject,from,receivedDateTime,isRead,bodyPreview,body,conversationId')
-    .top(50)
+    .top(500)
     .get()
 
   return (result.value ?? []).map((msg: any) => normalizeGraphMessage(accountId, msg))

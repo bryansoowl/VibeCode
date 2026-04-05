@@ -7,4 +7,47 @@ search it up or it will be gone.
 
 2. 
 
-Remove Unread count at the side of profile picture, remove the language change into the settings. 
+When user use select on the accounts feature i want the unread count to follow the email's unread count. Right now it is just counting for all the emails. So we need to filter this, where there will be all the emails when all account is selected and also individual account unread count.
+
+I want to beutify the app too.  
+
+New calendar data domain, Google Calendar + Outlook Calendar via existing OAuth, separate calendar panel in dashboard
+
+Best Strategy (Minimize Tokens + Get Better Output)
+✅ Break into 4 separate prompts (in this order):
+Data Storage & Sync Architecture
+Unread Count Logic Fix
+Email Actions + Labels
+UI/UX Beautification + Calendar Integration
+
+🚀 6. Smart Founder Strategy
+Phase 1 (Now)
+Free only
+Validate product
+Keep cost < $0.20/user
+Phase 2
+Introduce:
+$3–$5 plan
+Storage upgrades
+Phase 3
+Add premium features:
+AI (huge monetization lever)
+Business accounts
+🧠 Final Reality Check
+
+Even Google doesn’t make money from free Gmail users directly.
+
+They profit from:
+
+Ads
+Workspace subscriptions
+🔑 The Real Answer
+
+👉 You should charge:
+
+$3–$5/month minimum
+
+BUT ONLY if:
+
+Your cost per user stays below ~$0.50
+You offer something Gmail doesn’t
