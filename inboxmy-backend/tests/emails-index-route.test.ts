@@ -135,3 +135,101 @@ describe('GET /api/emails/index — cursor pagination', () => {
     expect(res.body.emails).toHaveLength(0)
   })
 })
+
+// ── Top-level mocks for body fetch tests ────────────────────────────────────
+// All vi.mock calls MUST be at file top-level — Vitest hoists them automatically.
+// Do NOT place vi.mock inside describe() or it() — the mock will not take effect.
+vi.mock('../src/email/gmail-client', () => ({
+  fetchNewEmails: vi.fn(),
+  fetchEmailsMetadata: vi.fn(),
+}))
+vi.mock('../src/email/outlook-client', () => ({
+  fetchNewEmails: vi.fn(),
+  fetchEmailsMetadata: vi.fn(),
+}))
+vi.mock('../src/auth/gmail', () => ({
+  getAuthedClient: vi.fn().mockResolvedValue({}),
+}))
+vi.mock('googleapis', () => ({
+  google: {
+    gmail: () => ({
+      users: {
+        messages: {
+          get: vi.fn().mockResolvedValue({
+            data: {
+              id: 'msg-1',
+              threadId: 'thread-1',
+              labelIds: [],
+              snippet: 'snippet',
+              internalDate: '1700000000000',
+              sizeEstimate: 1024,
+              payload: {
+                headers: [
+                  { name: 'From', value: 'sender@example.com' },
+                  { name: 'Subject', value: 'Test Subject' },
+                ],
+                mimeType: 'text/html',
+                body: { data: Buffer.from('<p>Hello body</p>').toString('base64') },
+                parts: [],
+              },
+            },
+          }),
+        },
+      },
+    }),
+  },
+}))
+
+describe('GET /api/emails/index/:id — on-demand body fetch', () => {
+  beforeEach(() => {
+    testDb = makeTestDb()
+    seedPrerequisites(testDb)
+    seedIndexRow(testDb, { email_id: 'uuid-1', provider_message_id: 'msg-1' })
+  })
+  afterEach(() => testDb.close())
+
+  it('returns 404 for unknown email_id', async () => {
+    const app = await makeApp()
+    const res = await request(app).get('/api/emails/index/nonexistent-uuid')
+    expect(res.status).toBe(404)
+  })
+
+  it('fetches and caches body when has_full_body=0', async () => {
+    const app = await makeApp()
+    const res = await request(app).get('/api/emails/index/uuid-1')
+    expect(res.status).toBe(200)
+    expect(res.body).toHaveProperty('email_id', 'uuid-1')
+    expect(res.body.body).toBe('<p>Hello body</p>')
+
+    // Verify DB state: email_body row inserted and has_full_body flag set
+    const bodyRow = testDb.prepare('SELECT * FROM email_body WHERE email_id = ?').get('uuid-1') as any
+    expect(bodyRow).toBeTruthy()
+    const indexRow = testDb.prepare('SELECT has_full_body FROM inbox_index WHERE email_id = ?').get('uuid-1') as any
+    expect(indexRow.has_full_body).toBe(1)
+  })
+
+  it('serves body from email_body cache when has_full_body=1', async () => {
+    testDb.prepare(`INSERT INTO email_body (email_id, body_enc, body_format, fetched_at)
+      VALUES ('uuid-1', ?, 'html', ?)`)
+      .run(encrypt('<p>Cached body</p>', TEST_DATA_KEY), Date.now())
+    testDb.prepare(`UPDATE inbox_index SET has_full_body=1 WHERE email_id='uuid-1'`).run()
+
+    const app = await makeApp()
+    const res = await request(app).get('/api/emails/index/uuid-1')
+    expect(res.status).toBe(200)
+    expect(res.body.body).toBe('<p>Cached body</p>')
+    expect(res.body.body_format).toBe('html')
+  })
+
+  it('is idempotent — second fetch returns same body', async () => {
+    testDb.prepare(`INSERT INTO email_body (email_id, body_enc, body_format, fetched_at)
+      VALUES ('uuid-1', ?, 'text', ?)`)
+      .run(encrypt('Plain body', TEST_DATA_KEY), Date.now())
+    testDb.prepare(`UPDATE inbox_index SET has_full_body=1 WHERE email_id='uuid-1'`).run()
+
+    const app = await makeApp()
+    const res1 = await request(app).get('/api/emails/index/uuid-1')
+    const res2 = await request(app).get('/api/emails/index/uuid-1')
+    expect(res1.body.body).toBe(res2.body.body)
+  })
+})

@@ -1,7 +1,7 @@
 // src/routes/emails.ts
 import { Router, type Request, type Response } from 'express'
 import { getDb } from '../db'
-import { decrypt } from '../crypto'
+import { decrypt, encrypt } from '../crypto'
 import { z } from 'zod'
 import { listAttachments, getAttachmentContent } from '../email/attachments'
 
@@ -286,6 +286,135 @@ emailsRouter.get('/index', (req: Request, res: Response) => {
     return res.json({ emails, next_cursor })
   } catch {
     return res.status(500).json({ error: 'Failed to decrypt index data' })
+  }
+})
+
+// ── GET /api/emails/index/:id — on-demand body fetch (Phase 3) ───────────────
+// 1. If email_body row exists → return cached decrypted body immediately
+// 2. If not → fetch full email from provider, encrypt, store in email_body,
+//    mark inbox_index.has_full_body=1, return body
+// INSERT uses ON CONFLICT DO NOTHING (body is immutable once stored).
+// INSERT + UPDATE wrapped in a transaction to keep has_full_body consistent.
+emailsRouter.get('/index/:id', async (req: Request, res: Response) => {
+  const user = (req as any).user
+  const db = getDb()
+
+  // Verify email exists and belongs to this user (JOIN is OK here — one-time ownership check)
+  const indexRow = db.prepare(`
+    SELECT ii.*, a.provider, a.id as acct_id
+    FROM inbox_index ii
+    JOIN accounts a ON a.id = ii.account_id
+    WHERE ii.email_id = ? AND a.user_id = ?
+  `).get(req.params.id, user.id) as any
+
+  if (!indexRow) return res.status(404).json({ error: 'Email not found' })
+
+  // ── Check cache ────────────────────────────────────────────────────────────
+  const cached = db.prepare('SELECT * FROM email_body WHERE email_id = ?').get(req.params.id) as any
+  if (cached) {
+    return res.json({
+      email_id: indexRow.email_id,
+      account_id: indexRow.account_id,
+      subject: decrypt(indexRow.subject_preview_enc, user.dataKey),
+      sender_email: indexRow.sender_email,
+      sender_name: indexRow.sender_name,
+      received_at: indexRow.received_at,
+      folder: indexRow.folder,
+      tab: indexRow.tab,
+      is_read: indexRow.is_read,
+      is_important: indexRow.is_important,
+      body: decrypt(cached.body_enc, user.dataKey),
+      body_format: cached.body_format,
+      has_full_body: 1,
+      sync_state: 'complete',
+    })
+  }
+
+  // ── Fetch from provider ────────────────────────────────────────────────────
+  try {
+    let bodyHtml: string | null = null
+    let bodyText: string | null = null
+    let rawHeaders: string | null = null
+
+    if (indexRow.provider === 'gmail') {
+      const { getAuthedClient } = await import('../auth/gmail')
+      const { google } = await import('googleapis')
+      const auth = await getAuthedClient(indexRow.account_id)
+      const gmail = google.gmail({ version: 'v1', auth })
+      const full = await gmail.users.messages.get({
+        userId: 'me', id: indexRow.provider_message_id, format: 'full',
+      })
+      function extractBody(payload: any): { html: string | null; text: string | null } {
+        let html: string | null = null
+        let text: string | null = null
+        function walk(part: any) {
+          if (!part) return
+          if (part.mimeType === 'text/html' && part.body?.data)
+            html = Buffer.from(part.body.data, 'base64').toString('utf-8')
+          else if (part.mimeType === 'text/plain' && part.body?.data)
+            text = Buffer.from(part.body.data, 'base64').toString('utf-8')
+          for (const sub of part.parts ?? []) walk(sub)
+        }
+        walk(payload)
+        return { html, text }
+      }
+      const extracted = extractBody(full.data.payload)
+      bodyHtml = extracted.html
+      bodyText = extracted.text
+      rawHeaders = JSON.stringify(full.data.payload?.headers ?? [])
+    } else {
+      const { getAccessToken } = await import('../auth/outlook')
+      const token = await getAccessToken(indexRow.account_id)
+      const msgRes = await fetch(
+        `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(indexRow.provider_message_id)}?$select=body,internetMessageHeaders`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      if (!msgRes.ok) throw new Error(`Outlook body fetch failed: ${msgRes.status}`)
+      const msg = await msgRes.json() as any
+      bodyHtml = msg.body?.contentType === 'html' ? msg.body.content : null
+      bodyText = msg.body?.contentType === 'text' ? msg.body.content : null
+      rawHeaders = JSON.stringify(msg.internetMessageHeaders ?? [])
+    }
+
+    const body = bodyHtml ?? bodyText ?? ''
+    const bodyFormat = bodyHtml ? 'html' : 'text'
+    const bodyEnc = encrypt(body, user.dataKey)
+    const headersEnc = rawHeaders ? encrypt(rawHeaders, user.dataKey) : null
+
+    // ── Store atomically ────────────────────────────────────────────────────
+    const storeBody = db.transaction(() => {
+      db.prepare(`
+        INSERT INTO email_body (email_id, body_enc, body_format, raw_headers_enc, fetched_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(email_id) DO NOTHING
+      `).run(req.params.id, bodyEnc, bodyFormat, headersEnc, Date.now())
+
+      db.prepare(`
+        UPDATE inbox_index SET has_full_body = 1, sync_state = 'complete'
+        WHERE email_id = ?
+      `).run(req.params.id)
+    })
+    storeBody()
+
+    return res.json({
+      email_id: indexRow.email_id,
+      account_id: indexRow.account_id,
+      subject: decrypt(indexRow.subject_preview_enc, user.dataKey),
+      sender_email: indexRow.sender_email,
+      sender_name: indexRow.sender_name,
+      received_at: indexRow.received_at,
+      folder: indexRow.folder,
+      tab: indexRow.tab,
+      is_read: indexRow.is_read,
+      is_important: indexRow.is_important,
+      body,
+      body_format: bodyFormat,
+      has_full_body: 1,
+      sync_state: 'complete',
+    })
+  } catch (err: any) {
+    console.error(`[index/:id] Body fetch failed for ${req.params.id}:`, err.message)
+    return res.status(502).json({ error: 'Failed to fetch email body' })
   }
 })
 
