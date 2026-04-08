@@ -151,7 +151,6 @@ emailsRouter.get('/', (req: Request, res: Response) => {
       JOIN accounts a ON a.id = ii.account_id
       WHERE ${II_WHERE}
       ORDER BY ii.received_at DESC
-      LIMIT 2000
     `).all(...iiParams) as any[]
 
     const q = search.toLowerCase()

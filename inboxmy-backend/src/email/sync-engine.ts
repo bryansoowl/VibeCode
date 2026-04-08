@@ -88,6 +88,11 @@ export async function syncAccount(
       VALUES (?, ?, ?)
     `)
 
+    // Resolve the inbox_index UUID for emails already backfilled (ON CONFLICT DO NOTHING case)
+    const lookupEmailId = db.prepare(
+      'SELECT email_id FROM inbox_index WHERE account_id = ? AND provider_message_id = ?'
+    )
+
     // Derive once per sync call — not per email, not per token
     const searchKey = deriveSearchKey(dataKey)
 
@@ -133,9 +138,9 @@ export async function syncAccount(
               accountId,
             })
           }
-          // Save UUID so email_search can reference the same inbox_index row (Fix 5)
+          // Save UUID so email_search can reference the same inbox_index row
           const emailUuid = randomUUID()
-          insertIndex.run(
+          const indexResult = insertIndex.run(
             emailUuid,
             accountId,
             email.id,
@@ -152,13 +157,20 @@ export async function syncAccount(
             parsed.category ?? null
           )
 
+          // If inbox_index already had this email (backfilled), ON CONFLICT DO NOTHING
+          // means emailUuid was never inserted — look up the real UUID to avoid FK crash.
+          const resolvedEmailId: string | null = indexResult.changes > 0
+            ? emailUuid
+            : (lookupEmailId.get(accountId, email.id) as any)?.email_id ?? null
+
           // Search token indexing — runs on plaintext BEFORE encryption
-          // Dedup tokens first, then cap, then hash (Fix 2 + Fix 6)
-          const tokens = [...new Set(
-            [email.sender, email.subject, email.snippet ?? ''].flatMap(tokenizeForSearch)
-          )].slice(0, SEARCH_TOKEN_CAP)
-          for (const token of tokens) {
-            insertSearchToken.run(emailUuid, accountId, searchTokenHash(token, searchKey))
+          if (resolvedEmailId) {
+            const tokens = [...new Set(
+              [email.sender, email.subject, email.snippet ?? ''].flatMap(tokenizeForSearch)
+            )].slice(0, SEARCH_TOKEN_CAP)
+            for (const token of tokens) {
+              insertSearchToken.run(resolvedEmailId, accountId, searchTokenHash(token, searchKey))
+            }
           }
 
           if (parsed.bill?.amountRm != null || parsed.bill?.dueDateMs != null) {
