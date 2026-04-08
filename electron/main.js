@@ -5,6 +5,7 @@ const fs = require('fs')
 const { spawn } = require('child_process')
 const AutoLaunch = require('electron-auto-launch')
 const { makeNotificationKey } = require('./utils')
+const { SyncManager } = require('./sync-manager')
 
 const BACKEND_PORT = 3001
 const BACKEND_URL = `http://localhost:${BACKEND_PORT}`
@@ -19,7 +20,7 @@ const GEMINI_KEY_FILE = path.join(app.getPath('userData'), 'gemini.enc')
 let mainWindow = null
 let tray = null
 let backendProcess = null
-let syncTimer = null
+let syncManager = null
 let notifTimer = null
 let emailNotifEnabled = true  // in-memory cache — populated in app.whenReady
 
@@ -160,85 +161,35 @@ function createTray() {
   tray.on('click', () => { mainWindow?.show(); mainWindow?.focus() })
 }
 
-// ── Scheduler ───────────────────────────────────────────────────────────────
-
-// Sync emails for all connected accounts (runs every 60s)
-async function runSyncTick() {
-  if (!mainWindow || mainWindow.isDestroyed()) return
-  const winSession = mainWindow.webContents.session
-  const body = await new Promise((resolve) => {
-    const payload = '{}'
-    const req = net.request({
-      url: `${BACKEND_URL}/api/sync/trigger`,
-      method: 'POST',
-      session: winSession,
-    })
+// ── API request helper ───────────────────────────────────────────────────────
+// Authenticated fetch using the mainWindow session (carries session cookies).
+// Returns { status, body } or null on network error.
+function apiRequest(path, method = 'GET', body = null) {
+  return new Promise((resolve) => {
+    if (!mainWindow || mainWindow.isDestroyed()) { resolve(null); return }
+    const winSession = mainWindow.webContents.session
+    const payload = body != null ? JSON.stringify(body) : null
+    const req = net.request({ url: `${BACKEND_URL}${path}`, method, session: winSession })
+    if (payload) {
+      req.setHeader('Content-Type', 'application/json')
+      req.setHeader('Content-Length', Buffer.byteLength(payload))
+    }
     req.on('response', (res) => {
       let buf = ''
       res.on('data', (chunk) => { buf += chunk })
-      res.on('end', () => resolve(buf))
+      res.on('end', () => {
+        let parsed = null
+        try { parsed = JSON.parse(buf) } catch {}
+        resolve({ status: res.statusCode, body: parsed })
+      })
     })
-    req.on('error', () => resolve(''))
-    req.setHeader('Content-Type', 'application/json')
-    req.setHeader('Content-Length', Buffer.byteLength(payload))
-    req.write(payload)
+    req.on('error', () => resolve(null))
+    if (payload) req.write(payload)
     req.end()
-  }).catch(() => '')
-
-  let syncResult = {}
-  try { syncResult = JSON.parse(body) } catch { /* empty or non-JSON response */ }
-
-  const { added = 0, emails = [] } = syncResult
-
-  // Fetch authoritative unread count → update taskbar badge + send emails to renderer
-  if (added > 0 && mainWindow && !mainWindow.isDestroyed()) {
-    await new Promise((resolve) => {
-      const req2 = net.request({
-        url: `${BACKEND_URL}/api/emails/unread-count`,
-        method: 'GET',
-        session: winSession,
-      })
-      req2.on('response', (res) => {
-        let buf2 = ''
-        res.on('data', (c) => { buf2 += c })
-        res.on('end', () => {
-          try {
-            const unreadCount = JSON.parse(buf2).count ?? 0
-            setWindowsBadge(mainWindow, unreadCount)
-            if (!mainWindow.isDestroyed()) {
-              // Send emails so renderer can fire Web Notifications
-              mainWindow.webContents.send('new-emails', { added, unreadCount, emails })
-            }
-          } catch {}
-          resolve()
-        })
-      })
-      req2.on('error', () => resolve())
-      req2.end()
-    }).catch(() => {})
-  }
-
-  // Tell the renderer to refresh its email list after background sync
-  if (!mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('sync-complete')
-  }
-
-  // Restore any emails whose snooze time has passed
-  await new Promise((resolve) => {
-    const unsnoozReq = net.request({
-      url: `${BACKEND_URL}/api/emails/unsnooze-due`,
-      method: 'POST',
-      session: winSession,
-    })
-    unsnoozReq.on('response', (res) => {
-      res.on('data', () => {})
-      res.on('end', resolve)
-    })
-    unsnoozReq.on('error', () => resolve())
-    unsnoozReq.setHeader('Content-Length', '0')
-    unsnoozReq.end()
   })
 }
+
+// ── Scheduler ───────────────────────────────────────────────────────────────
 
 // Check for due-soon bills and fire notifications (runs every 60 min)
 async function runSchedulerTick() {
@@ -434,11 +385,10 @@ app.whenReady().then(async () => {
   setupIPC()
   emailNotifEnabled = loadPrefs().emailNotifications
 
-  // Email sync: first run 30s after launch, then every 15 min
-  syncTimer = setTimeout(() => {
-    runSyncTick()
-    syncTimer = setInterval(runSyncTick, SYNC_INTERVAL_MS)
-  }, SCHEDULER_STARTUP_DELAY_MS)
+  syncManager = new SyncManager(apiRequest, mainWindow, BACKEND_URL, {
+    onNewEmails: ({ unreadCount }) => setWindowsBadge(mainWindow, unreadCount),
+  })
+  syncManager.start()
 
   // Bill notifications: first check 60s after launch, then every 60 min
   notifTimer = setTimeout(() => {
@@ -452,7 +402,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
-  if (syncTimer)  { clearTimeout(syncTimer);  clearInterval(syncTimer) }
+  if (syncManager) syncManager.stop()
   if (notifTimer) { clearTimeout(notifTimer); clearInterval(notifTimer) }
   if (backendProcess) backendProcess.kill()
 })
