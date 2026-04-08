@@ -1,6 +1,6 @@
 // src/crypto.ts
 import forge from 'node-forge'
-import { pbkdf2Sync, randomBytes } from 'crypto'
+import { pbkdf2Sync, randomBytes, hkdfSync, createHmac } from 'crypto'
 import { config } from './config'
 
 // ─── Internal AES-256-GCM helpers ────────────────────────────────────────────
@@ -71,4 +71,24 @@ export function wrapKey(dataKey: Buffer, wrappingKey: Buffer): string {
 export function unwrapKey(enc: string, wrappingKey: Buffer): Buffer {
   const binaryStr = aesDecrypt(enc, wrappingKey)
   return Buffer.from(binaryStr, 'binary')
+}
+
+// ─── Search key derivation ────────────────────────────────────────────────────
+// Derives a separate 32-byte key for HMAC search tokens via HKDF-SHA256.
+// Context string "search-token-key" domain-separates this key from the Data Key.
+// Deterministic: same dataKey always produces the same searchKey.
+// NEVER store the returned buffer.
+
+export function deriveSearchKey(dataKey: Buffer): Buffer {
+  return Buffer.from(
+    hkdfSync('sha256', dataKey, Buffer.alloc(32), 'search-token-key', 32)
+  )
+}
+
+/**
+ * HMAC-SHA256 a single (pre-normalized) token using the derived search key.
+ * Call deriveSearchKey(dataKey) once per request/sync and pass the result here.
+ */
+export function searchTokenHash(token: string, searchKey: Buffer): string {
+  return createHmac('sha256', searchKey).update(token, 'utf8').digest('hex')
 }

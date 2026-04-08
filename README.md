@@ -715,6 +715,122 @@ The current version is a single-user Electron desktop app with full local encryp
 
 ---
 
+## Database Inspection (SQLite)
+
+The database lives at `inboxmy-backend/data/inboxmy.db`.
+
+### Opening the database (PowerShell)
+
+```powershell
+& "C:\Users\bryan.GOAT\AppData\Local\Microsoft\WinGet\Packages\SQLite.SQLite_Microsoft.Winget.Source_8wekyb3d8bbwe\sqlite3.exe" "C:\Users\bryan.GOAT\Downloads\VibeCode\inboxmy-backend\data\inboxmy.db"
+```
+
+Or if `sqlite3` is on your PATH, open it from the data folder to avoid path wrapping issues:
+
+```powershell
+cd "C:\Users\bryan.GOAT\Downloads\VibeCode\inboxmy-backend\data"
+sqlite3 inboxmy.db
+```
+
+Type `.quit` to exit. Type `.tables` to list all tables.
+
+### Sync progress queries
+
+Run these inside the sqlite3 shell.
+
+**How many emails are indexed total:**
+```sql
+SELECT COUNT(*) AS total_indexed FROM inbox_index;
+```
+
+**Per-account breakdown with email address:**
+```sql
+SELECT a.id, a.email, a.provider, COUNT(ii.email_id) AS synced
+FROM accounts a
+LEFT JOIN inbox_index ii ON ii.account_id = a.id
+GROUP BY a.id
+ORDER BY synced DESC;
+```
+
+**Backfill progress per folder (is it still running? how far back has it reached?):**
+```sql
+SELECT account_id, folder, complete,
+  CASE WHEN cursor IS NOT NULL
+    THEN datetime(json_extract(cursor,'$.received_at')/1000,'unixepoch')
+    ELSE 'not started'
+  END AS oldest_email_reached
+FROM sync_backfill_cursors;
+```
+
+- `complete = 0` with a date → still running, date shows how far back it has crawled
+- `complete = 0` with "not started" → backfill hasn't been triggered for this account yet
+- `complete = 1` → this folder is fully synced
+
+**Recent sync activity (errors, timing, email counts):**
+```sql
+SELECT datetime(started_at/1000,'unixepoch') AS started,
+  emails_added, error,
+  (finished_at - started_at)/1000 AS duration_secs
+FROM sync_log ORDER BY started_at DESC LIMIT 10;
+```
+
+### Cleanup queries
+
+**Always enable cascade deletes first when running DELETE commands:**
+```sql
+PRAGMA foreign_keys = ON;
+```
+
+**Preview test/dummy accounts before deleting:**
+```sql
+SELECT id, email, provider FROM accounts WHERE email LIKE '%@test.com';
+```
+
+**Delete test accounts (cascades to inbox_index, sync_backfill_cursors, sync_state, etc.):**
+```sql
+PRAGMA foreign_keys = ON;
+DELETE FROM accounts WHERE email LIKE '%@test.com';
+```
+
+**Verify cleanup:**
+```sql
+SELECT COUNT(*) FROM accounts;
+SELECT COUNT(*) FROM inbox_index;
+SELECT COUNT(*) FROM sync_backfill_cursors;
+```
+
+### API endpoints (PowerShell)
+
+Port is `3001` by default.
+
+**Login and save session cookie:**
+```powershell
+curl.exe -s -c cookies.txt -X POST http://localhost:3001/api/auth/login `
+  -H "Content-Type: application/json" `
+  -d '{\"email\":\"your@email.com\",\"password\":\"yourpassword\"}'
+```
+
+**Check sync state (batch size and timing per account):**
+```powershell
+curl.exe -s -b cookies.txt http://localhost:3001/api/sync/state
+```
+
+**Trigger a manual sync for all accounts:**
+```powershell
+curl.exe -s -b cookies.txt -X POST http://localhost:3001/api/sync/trigger `
+  -H "Content-Type: application/json" `
+  -d '{}'
+```
+
+**Trigger backfill for a specific account:**
+```powershell
+curl.exe -s -b cookies.txt -X POST http://localhost:3001/api/sync/backfill `
+  -H "Content-Type: application/json" `
+  -d '{\"accountId\":\"your-account-id-here\",\"batchSize\":100}'
+```
+
+---
+
 ## Next Session Prompt
 
 Copy and paste this at the start of your next session:

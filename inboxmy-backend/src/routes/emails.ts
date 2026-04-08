@@ -86,6 +86,8 @@ emailsRouter.get('/', (req: Request, res: Response) => {
   }
   // Always exclude trash unless the user is explicitly viewing the trash folder
   if (folder !== 'trash') { conditions.push("e.folder != 'trash'") }
+  // Always exclude drafts unless the user is explicitly viewing the drafts folder
+  if (folder !== 'draft') { conditions.push("e.folder != 'draft'") }
   // Inbox always excludes Promotions tab unless an explicit tab filter is set
   if (folder === 'inbox' && !tab) { conditions.push("e.tab != 'promotions'") }
 
@@ -107,29 +109,73 @@ emailsRouter.get('/', (req: Request, res: Response) => {
       return res.json({ emails, limit, offset, total })
     }
 
-    // In-memory search path: fetch up to 2000 candidates, decrypt, filter
-    const candidates = db.prepare(`${EMAIL_SELECT} WHERE ${WHERE} ORDER BY e.received_at DESC LIMIT 2000`).all(...params) as any[]
+    // Search path — in-memory decrypt on inbox_index.
+    // inbox_index holds ALL emails (burst + backfill + incremental).
+    // email_search token index is used going forward once populated by new syncs.
+    const iiConditions: string[] = ['a.user_id = ?']
+    const iiParams: any[] = [user.id]
+
+    if (folder)    { iiConditions.push('ii.folder = ?');      iiParams.push(folder) }
+    if (tab)       { iiConditions.push('ii.tab = ?');         iiParams.push(tab) }
+    if (important) { iiConditions.push('ii.is_important = 1') }
+    if (category)  { iiConditions.push('ii.category = ?');    iiParams.push(category) }
+    if (idList.length > 0) {
+      iiConditions.push(`ii.account_id IN (${idList.map(() => '?').join(',')})`)
+      iiParams.push(...idList)
+    }
+    if (labelId) {
+      const label = db.prepare('SELECT id FROM labels WHERE id = ? AND user_id = ?').get(labelId, user.id)
+      if (!label) return res.status(404).json({ error: 'Label not found' })
+      iiConditions.push(`ii.provider_message_id IN (SELECT email_id FROM email_labels WHERE label_id = ?)`)
+      iiParams.push(labelId)
+    }
+    if (unread)              { iiConditions.push('ii.is_read = 0') }
+    if (dateFromMs !== null) { iiConditions.push('ii.received_at >= ?'); iiParams.push(dateFromMs) }
+    if (dateToMs !== null)   { iiConditions.push('ii.received_at <= ?'); iiParams.push(dateToMs) }
+    if (snoozed) {
+      iiConditions.push('ii.snoozed_until IS NOT NULL')
+    } else {
+      iiConditions.push('ii.snoozed_until IS NULL')
+    }
+    if (folder !== 'trash') { iiConditions.push("ii.folder != 'trash'") }
+    if (folder !== 'draft') { iiConditions.push("ii.folder != 'draft'") }
+    if (folder === 'inbox' && !tab) { iiConditions.push("ii.tab != 'promotions'") }
+
+    const II_WHERE = iiConditions.join(' AND ')
+    const candidates = db.prepare(`
+      SELECT ii.provider_message_id AS id, ii.account_id, ii.thread_id,
+        ii.subject_preview_enc, ii.sender_email AS sender, ii.sender_name,
+        ii.received_at, ii.is_read, ii.folder, ii.tab, ii.is_important,
+        ii.category, ii.snippet_preview_enc, null AS raw_size
+      FROM inbox_index ii
+      JOIN accounts a ON a.id = ii.account_id
+      WHERE ${II_WHERE}
+      ORDER BY ii.received_at DESC
+      LIMIT 2000
+    `).all(...iiParams) as any[]
 
     const q = search.toLowerCase()
     const filtered: any[] = []
     for (const r of candidates) {
       try {
-        const subject = decrypt(r.subject_enc, user.dataKey)
-        const snippet = r.snippet ? decrypt(r.snippet, user.dataKey) : null
+        const subject = decrypt(r.subject_preview_enc, user.dataKey)
+        const snippet = r.snippet_preview_enc ? decrypt(r.snippet_preview_enc, user.dataKey) : null
         if (
           r.sender.toLowerCase().includes(q) ||
           subject.toLowerCase().includes(q) ||
           (snippet ?? '').toLowerCase().includes(q)
         ) {
           filtered.push({
-            ...r, subject, snippet,
-            subject_enc: undefined,
-            labels: r.labels_json ? JSON.parse(r.labels_json) : [],
-            labels_json: undefined,
+            ...r,
+            subject,
+            snippet,
+            subject_preview_enc: undefined,
+            snippet_preview_enc: undefined,
+            labels: [],
           })
         }
       } catch {
-        // Skip rows that fail decryption rather than aborting the whole response
+        // Skip rows that fail decryption
       }
     }
 

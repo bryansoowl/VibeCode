@@ -181,6 +181,23 @@ const MIGRATIONS: string[] = [
   ALTER TABLE sync_state ADD COLUMN last_batch_size INTEGER NOT NULL DEFAULT 100;
   ALTER TABLE sync_state ADD COLUMN last_batch_duration_ms INTEGER;
   `,
+  // Migration 13: HMAC search token index
+  // token_hash = HMAC-SHA256(normalized_token, deriveSearchKey(dataKey))
+  // No plaintext tokens are stored. Supports exact-word AND search only.
+  `
+  CREATE TABLE IF NOT EXISTS email_search (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    email_id   TEXT NOT NULL REFERENCES inbox_index(email_id) ON DELETE CASCADE,
+    account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_search_account_token
+    ON email_search(account_id, token_hash);
+
+  CREATE INDEX IF NOT EXISTS idx_search_email
+    ON email_search(email_id);
+  `,
 ]
 
 export function runMigrations(db: Database.Database): void {

@@ -1,6 +1,7 @@
 // src/email/sync-engine.ts
 import { getDb } from '../db'
-import { encrypt } from '../crypto'
+import { encrypt, deriveSearchKey, searchTokenHash } from '../crypto'
+import { tokenizeForSearch, SEARCH_TOKEN_CAP } from './search'
 import { fetchNewEmails as fetchGmail } from './gmail-client'
 import { fetchNewEmails as fetchOutlook } from './outlook-client'
 import { parseEmail } from '../parsers'
@@ -73,6 +74,23 @@ export async function syncAccount(
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `)
 
+    const deleteStaleDraft = db.prepare(`
+      DELETE FROM emails
+      WHERE account_id = ? AND thread_id = ? AND folder = 'draft' AND id != ?
+    `)
+    const deleteStaleDraftIndex = db.prepare(`
+      DELETE FROM inbox_index
+      WHERE account_id = ? AND thread_id = ? AND folder = 'draft' AND provider_message_id != ?
+    `)
+
+    const insertSearchToken = db.prepare(`
+      INSERT OR IGNORE INTO email_search (email_id, account_id, token_hash)
+      VALUES (?, ?, ?)
+    `)
+
+    // Derive once per sync call — not per email, not per token
+    const searchKey = deriveSearchKey(dataKey)
+
     const syncAll = db.transaction((emails: NormalizedEmail[]) => {
       const staged: NewEmailSummary[] = []
       for (const email of emails) {
@@ -82,6 +100,12 @@ export async function syncAccount(
         const spamResult = scoreSpam(email)
         const finalFolder = spamResult.isSpam ? 'spam' : (email.folder ?? 'inbox')
         const finalTab    = finalFolder === 'spam' ? 'primary' : (email.tab ?? 'primary')
+
+        // Remove stale draft copies for the same thread before inserting the latest
+        if (finalFolder === 'draft' && email.threadId) {
+          deleteStaleDraft.run(accountId, email.threadId, email.id)
+          deleteStaleDraftIndex.run(accountId, email.threadId, email.id)
+        }
 
         const result = insertEmail.run(
           email.id, accountId, email.threadId ?? null,
@@ -99,15 +123,20 @@ export async function syncAccount(
 
         if (result.changes > 0) {
           added++
-          staged.push({
-            id: email.id,
-            sender: email.sender,
-            senderName: email.senderName ?? null,
-            subject: (email.subject ?? '').slice(0, 200),
-            accountId,
-          })
+          // Don't notify for drafts — they're not incoming messages
+          if (finalFolder !== 'draft') {
+            staged.push({
+              id: email.id,
+              sender: email.sender,
+              senderName: email.senderName ?? null,
+              subject: (email.subject ?? '').slice(0, 200),
+              accountId,
+            })
+          }
+          // Save UUID so email_search can reference the same inbox_index row (Fix 5)
+          const emailUuid = randomUUID()
           insertIndex.run(
-            randomUUID(),
+            emailUuid,
             accountId,
             email.id,
             email.threadId ?? null,
@@ -122,6 +151,16 @@ export async function syncAccount(
             email.isImportant ? 1 : 0,
             parsed.category ?? null
           )
+
+          // Search token indexing — runs on plaintext BEFORE encryption
+          // Dedup tokens first, then cap, then hash (Fix 2 + Fix 6)
+          const tokens = [...new Set(
+            [email.sender, email.subject, email.snippet ?? ''].flatMap(tokenizeForSearch)
+          )].slice(0, SEARCH_TOKEN_CAP)
+          for (const token of tokens) {
+            insertSearchToken.run(emailUuid, accountId, searchTokenHash(token, searchKey))
+          }
+
           if (parsed.bill?.amountRm != null || parsed.bill?.dueDateMs != null) {
             insertBill.run(
               randomUUID(), email.id, parsed.bill.biller,
