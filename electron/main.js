@@ -5,13 +5,11 @@ const fs = require('fs')
 const { spawn } = require('child_process')
 const AutoLaunch = require('electron-auto-launch')
 const { makeNotificationKey } = require('./utils')
+const { SyncManager } = require('./sync-manager')
 
 const BACKEND_PORT = 3001
 const BACKEND_URL = `http://localhost:${BACKEND_PORT}`
-const SYNC_INTERVAL_MS = 60 * 1000              // 60 seconds — email sync (History API makes this cheap)
-const BACKFILL_INTERVAL_MS = 5 * 60 * 1000      // 5 minutes — progressive backfill (idle only)
 const NOTIFICATION_INTERVAL_MS = 60 * 60 * 1000 // 60 minutes — bill notification check
-const SCHEDULER_STARTUP_DELAY_MS = 30 * 1000   // 30 seconds after launch
 const NOTIFIED_FILE = path.join(app.getPath('userData'), 'notified.json')
 const EMAIL_NOTIFIED_FILE = path.join(app.getPath('userData'), 'notified-emails.json')
 const PREFS_FILE = path.join(app.getPath('userData'), 'prefs.json')
@@ -20,10 +18,8 @@ const GEMINI_KEY_FILE = path.join(app.getPath('userData'), 'gemini.enc')
 let mainWindow = null
 let tray = null
 let backendProcess = null
-let syncTimer = null
+let syncManager = null
 let notifTimer = null
-let backfillTimer = null
-let backfillRunning = false   // lock — prevents overlapping backfill runs
 let emailNotifEnabled = true  // in-memory cache — populated in app.whenReady
 
 const autoLauncher = new AutoLaunch({ name: 'InboxMY' })
@@ -199,136 +195,6 @@ async function apiRequest(path, method = 'GET', bodyObj = null) {
 }
 
 // ── Scheduler ───────────────────────────────────────────────────────────────
-
-// Sync emails for all connected accounts (runs every 60s)
-async function runSyncTick() {
-  if (!mainWindow || mainWindow.isDestroyed()) return
-  const winSession = mainWindow.webContents.session
-  const body = await new Promise((resolve) => {
-    const payload = '{}'
-    const req = net.request({
-      url: `${BACKEND_URL}/api/sync/trigger`,
-      method: 'POST',
-      session: winSession,
-    })
-    req.on('response', (res) => {
-      let buf = ''
-      res.on('data', (chunk) => { buf += chunk })
-      res.on('end', () => resolve(buf))
-    })
-    req.on('error', () => resolve(''))
-    req.setHeader('Content-Type', 'application/json')
-    req.setHeader('Content-Length', Buffer.byteLength(payload))
-    req.write(payload)
-    req.end()
-  }).catch(() => '')
-
-  let syncResult = {}
-  try { syncResult = JSON.parse(body) } catch { /* empty or non-JSON response */ }
-
-  const { added = 0, emails = [] } = syncResult
-
-  // Fetch authoritative unread count → update taskbar badge + send emails to renderer
-  if (added > 0 && mainWindow && !mainWindow.isDestroyed()) {
-    await new Promise((resolve) => {
-      const req2 = net.request({
-        url: `${BACKEND_URL}/api/emails/unread-count`,
-        method: 'GET',
-        session: winSession,
-      })
-      req2.on('response', (res) => {
-        let buf2 = ''
-        res.on('data', (c) => { buf2 += c })
-        res.on('end', () => {
-          try {
-            const unreadCount = JSON.parse(buf2).count ?? 0
-            setWindowsBadge(mainWindow, unreadCount)
-            if (!mainWindow.isDestroyed()) {
-              // Send emails so renderer can fire Web Notifications
-              mainWindow.webContents.send('new-emails', { added, unreadCount, emails })
-            }
-          } catch {}
-          resolve()
-        })
-      })
-      req2.on('error', () => resolve())
-      req2.end()
-    }).catch(() => {})
-  }
-
-  // Tell the renderer to refresh its email list after background sync
-  if (!mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('sync-complete')
-  }
-
-  // Restore any emails whose snooze time has passed
-  await new Promise((resolve) => {
-    const unsnoozReq = net.request({
-      url: `${BACKEND_URL}/api/emails/unsnooze-due`,
-      method: 'POST',
-      session: winSession,
-    })
-    unsnoozReq.on('response', (res) => {
-      res.on('data', () => {})
-      res.on('end', resolve)
-    })
-    unsnoozReq.on('error', () => resolve())
-    unsnoozReq.setHeader('Content-Length', '0')
-    unsnoozReq.end()
-  })
-}
-
-// Progressive backfill: fetch older emails into inbox_index, 25 at a time (runs every 5 min, idle only)
-async function runBackfillTick() {
-  // Lock — skip if a previous run is still in progress
-  if (backfillRunning) {
-    console.log('[backfill] skipped - previous run still in progress')
-    return
-  }
-
-  // Idle gate — only run when the window is not focused (user is away)
-  if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isFocused()) {
-    console.log('[backfill] skipped - window focused')
-    return
-  }
-
-  backfillRunning = true
-  console.log('[backfill] starting')
-
-  try {
-    const accountsRes = await apiRequest('/api/accounts')
-    if (!accountsRes || accountsRes.status !== 200 || !Array.isArray(accountsRes.body?.accounts)) {
-      console.log(`[backfill] skipped - accounts fetch failed (status=${accountsRes?.status ?? 'null'} body=${JSON.stringify(accountsRes?.body)})`)
-      return
-    }
-
-    const accounts = accountsRes.body.accounts
-    if (accounts.length === 0) {
-      console.log('[backfill] skipped - no connected accounts')
-      return
-    }
-
-    // Sequential per account — avoids hammering provider rate limits
-    for (const account of accounts) {
-      console.log(`[backfill] ${account.email} (${account.provider})`)
-      const result = await apiRequest('/api/sync/backfill', 'POST', { accountId: account.id })
-      if (!result || result.status !== 200) {
-        console.log(`[backfill] ${account.email} - failed (status ${result?.status ?? 'network error'})`)
-        continue
-      }
-      for (const r of result.body.results ?? []) {
-        if (r.skipped) continue
-        console.log(`[backfill] ${account.email}/${r.folder} — added ${r.added}${r.complete ? ' (complete)' : ''}`)
-      }
-    }
-
-    console.log('[backfill] done')
-  } catch (err) {
-    console.error('[backfill] error:', err.message)
-  } finally {
-    backfillRunning = false
-  }
-}
 
 // Check for due-soon bills and fire notifications (runs every 60 min)
 async function runSchedulerTick() {
@@ -524,17 +390,10 @@ app.whenReady().then(async () => {
   setupIPC()
   emailNotifEnabled = loadPrefs().emailNotifications
 
-  // Email sync: first run 30s after launch, then every 60s
-  syncTimer = setTimeout(() => {
-    runSyncTick()
-    syncTimer = setInterval(runSyncTick, SYNC_INTERVAL_MS)
-  }, SCHEDULER_STARTUP_DELAY_MS)
-
-  // Progressive backfill: first run 90s after launch, then every 5 min (idle only)
-  backfillTimer = setTimeout(() => {
-    runBackfillTick()
-    backfillTimer = setInterval(runBackfillTick, BACKFILL_INTERVAL_MS)
-  }, 90_000)
+  syncManager = new SyncManager(apiRequest, mainWindow, BACKEND_URL, {
+    onNewEmails: ({ unreadCount }) => setWindowsBadge(mainWindow, unreadCount),
+  })
+  syncManager.start()
 
   // Bill notifications: first check 60s after launch, then every 60 min
   notifTimer = setTimeout(() => {
@@ -548,9 +407,8 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
-  if (syncTimer)     { clearTimeout(syncTimer);     clearInterval(syncTimer) }
-  if (backfillTimer) { clearTimeout(backfillTimer); clearInterval(backfillTimer) }
-  if (notifTimer)    { clearTimeout(notifTimer);    clearInterval(notifTimer) }
+  if (syncManager) syncManager.stop()
+  if (notifTimer) { clearTimeout(notifTimer); clearInterval(notifTimer) }
   if (backendProcess) backendProcess.kill()
 })
 
