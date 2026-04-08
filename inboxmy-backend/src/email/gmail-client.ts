@@ -165,6 +165,54 @@ export async function fetchEmailsMetadata(
   return results
 }
 
+/**
+ * Fetch the most recent inbox emails (metadata only) for burst sync on app launch.
+ * Scoped to inbox only — does NOT pass includeSpamTrash so spam/trash are excluded.
+ * @param accountId - The account to fetch for
+ * @param limit - Max emails to fetch (burst uses 200)
+ */
+export async function fetchBurstMetadata(
+  accountId: string,
+  limit: number
+): Promise<NormalizedEmailMetadata[]> {
+  const auth = await getAuthedClient(accountId)
+  const gmail = google.gmail({ version: 'v1', auth })
+
+  console.log(`[gmail] fetchBurstMetadata accountId=${accountId} limit=${limit}`)
+
+  let list: any
+  try {
+    list = await gmail.users.messages.list({
+      userId: 'me',
+      q: 'in:inbox newer_than:90d',
+      maxResults: limit,
+      // intentionally no includeSpamTrash — burst is inbox-only
+    })
+  } catch (err: any) {
+    console.error(`[gmail] fetchBurstMetadata list error: ${err.message}`)
+    throw err
+  }
+
+  const messages = list.data.messages ?? []
+  const results: NormalizedEmailMetadata[] = []
+
+  for (const msg of messages) {
+    try {
+      const meta = await gmail.users.messages.get({
+        userId: 'me',
+        id: msg.id!,
+        format: 'metadata',
+        metadataHeaders: ['From', 'Subject', 'Date'],
+      })
+      results.push(normalizeGmailMetadata(accountId, meta.data))
+    } catch (err: any) {
+      console.error(`[gmail] fetchBurstMetadata get error for ${msg.id}: ${err.message}`)
+    }
+  }
+
+  return results
+}
+
 function normalizeGmailMetadata(accountId: string, msg: any): NormalizedEmailMetadata {
   const headers: Record<string, string> = {}
   for (const h of msg.payload?.headers ?? []) {
