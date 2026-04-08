@@ -176,6 +176,11 @@ const MIGRATIONS: string[] = [
 
   CREATE INDEX IF NOT EXISTS idx_attachments_email ON attachments(email_id);
   `,
+  // Migration 12: adaptive batch sizing columns on sync_state
+  `
+  ALTER TABLE sync_state ADD COLUMN last_batch_size INTEGER NOT NULL DEFAULT 100;
+  ALTER TABLE sync_state ADD COLUMN last_batch_duration_ms INTEGER;
+  `,
 ]
 
 export function runMigrations(db: Database.Database): void {
