@@ -55,6 +55,33 @@ export async function fetchEmailsMetadata(
   return (result.value ?? []).map((msg: any) => normalizeGraphMetadata(accountId, msg))
 }
 
+/**
+ * Fetch the most recent inbox emails (metadata only) for burst sync on app launch.
+ * Outlook /me/messages is inbox-scoped by default.
+ * @param accountId - The account to fetch for
+ * @param limit - Max emails to fetch (burst uses 200)
+ */
+export async function fetchBurstMetadata(
+  accountId: string,
+  limit: number
+): Promise<NormalizedEmailMetadata[]> {
+  const accessToken = await getAccessToken(accountId)
+  const client = Client.init({
+    authProvider: (done) => done(null, accessToken),
+  })
+
+  const since = new Date(Date.now() - 90 * 86400_000).toISOString()
+
+  const result = await client
+    .api('/me/messages')
+    .filter(`receivedDateTime gt ${since}`)
+    .select('id,subject,from,receivedDateTime,isRead,bodyPreview,conversationId,importance')
+    .top(limit)
+    .get()
+
+  return (result.value ?? []).map((msg: any) => normalizeGraphMetadata(accountId, msg))
+}
+
 function normalizeGraphMessage(accountId: string, msg: any): NormalizedEmail {
   const from = msg.from?.emailAddress
   return {
