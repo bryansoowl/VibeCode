@@ -466,7 +466,7 @@ emailsRouter.get('/index/:id', async (req: Request, res: Response) => {
   }
 })
 
-emailsRouter.get('/:id', (req: Request, res: Response) => {
+emailsRouter.get('/:id', async (req: Request, res: Response) => {
   const user = (req as any).user
   const db = getDb()
   const row = db.prepare(`
@@ -481,7 +481,102 @@ emailsRouter.get('/:id', (req: Request, res: Response) => {
     WHERE e.id = ? AND a.user_id = ?
   `).get(req.params.id, user.id) as any
 
-  if (!row) return res.status(404).json({ error: 'Email not found' })
+  if (!row) {
+    // Backfill fallback: email is in inbox_index but not the emails table.
+    // Look it up by provider_message_id, fetch body on demand, cache in email_body.
+    const indexRow = db.prepare(`
+      SELECT ii.*, a.provider
+      FROM inbox_index ii
+      JOIN accounts a ON a.id = ii.account_id
+      WHERE ii.provider_message_id = ? AND a.user_id = ?
+    `).get(req.params.id, user.id) as any
+
+    if (!indexRow) return res.status(404).json({ error: 'Email not found' })
+
+    try {
+      const subject = decrypt(indexRow.subject_preview_enc, user.dataKey)
+      const snippet = indexRow.snippet_preview_enc ? decrypt(indexRow.snippet_preview_enc, user.dataKey) : null
+
+      const base = {
+        id: req.params.id,
+        account_id: indexRow.account_id,
+        thread_id: indexRow.thread_id,
+        subject, snippet,
+        sender: indexRow.sender_email,
+        sender_name: indexRow.sender_name,
+        received_at: indexRow.received_at,
+        is_read: indexRow.is_read,
+        folder: indexRow.folder,
+        tab: indexRow.tab,
+        is_important: indexRow.is_important,
+        category: indexRow.category,
+        labels: [],
+      }
+
+      // Return cached body immediately if available
+      const cached = db.prepare('SELECT * FROM email_body WHERE email_id = ?').get(indexRow.email_id) as any
+      if (cached) {
+        return res.json({ ...base, body: decrypt(cached.body_enc, user.dataKey), body_format: cached.body_format })
+      }
+
+      // Body not yet fetched — pull from provider now
+      let bodyHtml: string | null = null
+      let bodyText: string | null = null
+
+      if (indexRow.provider === 'gmail') {
+        const { getAuthedClient } = await import('../auth/gmail')
+        const { google } = await import('googleapis')
+        const auth = await getAuthedClient(indexRow.account_id)
+        const gmail = google.gmail({ version: 'v1', auth })
+        const full = await gmail.users.messages.get({
+          userId: 'me', id: indexRow.provider_message_id, format: 'full',
+        })
+        function extractBody(payload: any): { html: string | null; text: string | null } {
+          let html: string | null = null; let text: string | null = null
+          function walk(part: any) {
+            if (!part) return
+            if (part.mimeType === 'text/html' && part.body?.data)
+              html = Buffer.from(part.body.data, 'base64').toString('utf-8')
+            else if (part.mimeType === 'text/plain' && part.body?.data)
+              text = Buffer.from(part.body.data, 'base64').toString('utf-8')
+            for (const sub of part.parts ?? []) walk(sub)
+          }
+          walk(payload); return { html, text }
+        }
+        const extracted = extractBody(full.data.payload)
+        bodyHtml = extracted.html; bodyText = extracted.text
+      } else {
+        const { getAccessToken } = await import('../auth/outlook')
+        const token = await getAccessToken(indexRow.account_id)
+        const msgRes = await fetch(
+          `https://graph.microsoft.com/v1.0/me/messages/${encodeURIComponent(indexRow.provider_message_id)}?$select=body`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        if (msgRes.ok) {
+          const msg = await msgRes.json() as any
+          bodyHtml = msg.body?.contentType === 'html' ? msg.body.content : null
+          bodyText = msg.body?.contentType === 'text' ? msg.body.content : null
+        }
+      }
+
+      const body = bodyHtml ?? bodyText ?? ''
+      const bodyFormat = bodyHtml ? 'html' : 'text'
+
+      db.transaction(() => {
+        db.prepare(`
+          INSERT INTO email_body (email_id, body_enc, body_format, fetched_at)
+          VALUES (?, ?, ?, ?) ON CONFLICT(email_id) DO NOTHING
+        `).run(indexRow.email_id, encrypt(body, user.dataKey), bodyFormat, Date.now())
+        db.prepare(`UPDATE inbox_index SET has_full_body = 1, sync_state = 'complete' WHERE email_id = ?`)
+          .run(indexRow.email_id)
+      })()
+
+      return res.json({ ...base, body, body_format: bodyFormat })
+    } catch (err: any) {
+      console.error(`[emails/:id] backfill body fetch failed for ${req.params.id}:`, err.message)
+      return res.status(502).json({ error: 'Failed to fetch email body' })
+    }
+  }
 
   try {
     res.json({
