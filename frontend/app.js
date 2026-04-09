@@ -470,6 +470,39 @@ function renderEmailRow(email) {
   return row;
 }
 
+// Soft-refresh: prepend only new emails without clearing the list or losing scroll position.
+// Used by background sync so the view doesn't blink/flash.
+async function softRefreshEmails() {
+  // During search the list is already filtered — skip silent refresh
+  if (currentSearch) return;
+  // Empty list needs a full load
+  if (emailCache.length === 0) { loadEmails(true); return; }
+  if (emailLoading) return;
+
+  try {
+    const data = await fetchEmails({ ...buildEmailParams(0), limit: 50 });
+    const incoming = data.emails || [];
+    if (incoming.length === 0) return;
+
+    const existingIds = new Set(emailCache.map(e => e.id));
+    const newEmails = incoming.filter(e => !existingIds.has(e.id));
+    if (newEmails.length === 0) return;
+
+    // Prepend to cache and DOM without disturbing scroll
+    emailCache = newEmails.concat(emailCache);
+    emailOffset += newEmails.length;
+
+    const wrap = document.getElementById('el-items');
+    const fragment = document.createDocumentFragment();
+    newEmails.forEach(email => fragment.appendChild(renderEmailRow(email)));
+    wrap.insertBefore(fragment, wrap.firstChild);
+
+    const count = emailCache.length;
+    document.getElementById('email-count').textContent =
+      count + (emailHasMore ? '+' : '') + ' email' + (count !== 1 ? 's' : '');
+  } catch { /* non-critical — silent fail */ }
+}
+
 async function loadEmails(reset = false) {
   if (emailLoading) return;
   if (!reset && !emailHasMore) return;
@@ -1698,7 +1731,7 @@ if (window.inboxmy) {
 
   // Background sync completed — silently refresh email list + badges
   window.inboxmy.onSyncComplete(function() {
-    loadEmails(true)
+    softRefreshEmails()
     refreshUnreadCounts()
   })
 
@@ -1850,7 +1883,7 @@ async function backgroundSyncPoll() {
     if (result.added > 0 && Array.isArray(result.emails)) {
       showEmailNotifications(result.emails);
     }
-    loadEmails(true);
+    softRefreshEmails();
     refreshUnreadCounts();
   } catch { /* non-critical — ignore failures */ }
 }
